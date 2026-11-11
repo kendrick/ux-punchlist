@@ -14,7 +14,7 @@ Mutations take node IDs, not `#numbers`:
 
 ## Conventions
 
-- **Create an issue**: write the body to a file, then
+- **Create an issue**: invoke the `file-issue` skill, once per issue, including when `to-tickets` or another skill is publishing slices. Don't run the mutation below yourself. It's here as the write that `file-issue` makes. Write the body to a file, then
   `gh api graphql -F repo=<repo-id> -F title='...' -F b=@body.md -f query='mutation($repo:ID!,$title:String!,$b:String){createIssue(input:{repositoryId:$repo,title:$title,body:$b}){issue{number url}}}'`.
   Add `labelIds:[...]` and `parentIssueId:` to the input as needed.
 - **Read an issue**: `gh issue view <number> --json number,title,body,labels,comments`.
