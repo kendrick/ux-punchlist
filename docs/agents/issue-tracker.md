@@ -38,7 +38,7 @@ GitHub shares one number space across issues and PRs, so a bare `#42` may be eit
 
 ## When a skill says "publish to the issue tracker"
 
-Create a GitHub issue with `createIssue` as above.
+Invoke the `file-issue` skill once per issue, and let it do the creating. This holds for every skill that slices work into issues, `to-tickets` included: the slicing skill decides what the issues are, and `file-issue` files each one. Never call `createIssue` directly to file a ticket. When `file-issue` reaches the write, it still follows the GraphQL rules above.
 
 ## When a skill says "fetch the relevant ticket"
 
