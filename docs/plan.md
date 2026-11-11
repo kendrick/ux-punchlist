@@ -57,7 +57,7 @@ The session ends in a record, not just closed tickets.
 
 ## The full cycle
 
-Agentation's loop is annotate, send, fix. This one adds a planned review session at the front, several reviewers in the middle, and verification plus sign-off at the end.
+The usual click-to-feedback loop is annotate, send, fix. This one adds a planned review session at the front, several reviewers in the middle, and verification plus sign-off at the end.
 
 &#91;embedded content: review loop · 7 steps, 1 reopen path\]
 
@@ -114,31 +114,13 @@ routes:
 - **Reconcile first:** conflicting feedback from several reviewers is settled before anything routes.
 - **Craft from a hosted session:** the router opens a local worktree of that commit for Impeccable live, and the accepted variant deploys and enters Verify like any other fix.
 
-## Licensing: context and caveats
+## Licensing
 
-This assumes Agentation is licensed under PolyForm Shield. That license wasn't verified here, so confirm it in the repo before relying on any of this. This is orientation, not legal advice.
+Build from this plan and the spec, and keep other tools' source code out of the project and out of the agent's context.
 
-## What PolyForm Shield means for this plan
-
-Shield lets anyone use, change and redistribute the code, but not to compete with the licensor ([PolyForm licenses](https://polyformproject.org/licenses)). That limit sorts the plan into three cases:
-
-| What you do | Risk | Why |
-| --- | --- | --- |
-| Use Agentation as-is on your own or client work | Low | Using a tool isn't competing with its maker |
-| Fork it or build on its code, then publish the plugin | High | A published click-to-feedback tool for coding agents is Agentation's whole product |
-| Build the same concept from scratch | Low | Copyright covers code, not ideas; other tools already implement the same idea independently |
-
-Click an element, capture a payload, queue it, expose it over MCP, inject it with a hook: none of those patterns belong to anyone.
-
-## How to keep it clean
-
-The safe path is to build from your own spec and never let Agentation's code into the project or the agent's context.
-
-1. **Don't fork, vendor or copy Agentation code.** Don't paste it into Claude Code as reference either; "do it like this file" is how derived code sneaks in.
-2. **Work from your own spec.** The architecture and the decisions from a grill session are enough. Take ideas from other tools, then close the tab before writing code.
-3. **License your plugin MIT or Apache-2.0,** so nobody downstream faces this uncertainty.
-4. **Check every dependency's license before borrowing from it.** Browser Annotations' license is unknown; Playwright is Apache-2.0 and safe to build on.
-5. **Ask legal before any commercial use.** It's a five-minute question.
+1. **License the plugin MIT or Apache-2.0,** so nobody downstream faces licensing uncertainty.
+2. **Check every dependency's license before borrowing from it.** Browser Annotations' license is unknown; Playwright is Apache-2.0 and safe to build on.
+3. **Ask legal before any commercial use.** It's a five-minute question.
 
 ## Next steps
 
