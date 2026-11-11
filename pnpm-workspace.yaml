@@ -1,0 +1,13 @@
+# unbranded wrote this so `pnpm install` can build the native packages your
+# tooling needs, such as esbuild. pnpm blocks build scripts unless a package
+# is on the allowlist below; on pnpm 11 an un-approved build stops the install
+# cold. Commit this file so every install, yours and CI's, agrees.
+#
+# pnpm 10 reads onlyBuiltDependencies, pnpm 11 reads allowBuilds. Both are here
+# on purpose. Add a package to both to approve its build, or drop it to block one.
+
+allowBuilds:
+  esbuild: true
+
+onlyBuiltDependencies:
+  - esbuild

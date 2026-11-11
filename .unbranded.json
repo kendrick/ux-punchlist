@@ -1,0 +1,90 @@
+{
+	"_tool": "unbranded manages the files below. Run `unbranded diff` to see your local drift or `unbranded doctor` to audit the repo; https://github.com/kendrick/unbranded-starter",
+	"attribution": {
+		".editorconfig": "core-editorconfig",
+		".gitattributes": "core-gitattributes",
+		".nvmrc": "core-node-version",
+		".oxfmtrc.json": "core-oxlint",
+		".oxlintrc.json": "core-oxlint",
+		"playwright.config.ts": "opt-playwright",
+		"pnpm-workspace.yaml": "core-vitest",
+		"tsconfig.base.json": "core-typescript",
+		"tsconfig.json": "core-typescript",
+		"vitest.config.ts": "core-vitest"
+	},
+	"files": {
+		".editorconfig": "682978c2757a1250094bd618e3029c3a1d666216f8b95003bfcc26c3cbb658cd",
+		".gitattributes": "3fbffcfa4fa86929169db1a45cea5114178be460d98d3326e6263669503dbaf9",
+		".nvmrc": "20d2add851bf39edcc6b5e830930f962db7e19dffa2cab8610eed551eda6c302",
+		".oxfmtrc.json": "f8226b1cfd463ae5e231a59f8a6b524ce9fc477a4fb5afc54c0f0e8a23d25caf",
+		".oxlintrc.json": "96abef1a181cf9dfbbd9111321bfa12aff794224accae2107a9597c639e38d77",
+		"playwright.config.ts": "9d149f004feb8ebd483ea312d19adadaf1533699a5a517c43c1c1898742cc88d",
+		"pnpm-workspace.yaml": "666f20ae98693ff0a730d2196e431bf5af945a9d036b5908b32efef93cef6116",
+		"tsconfig.base.json": "fd04084094f688b9f685be0f9c1d5e356a15721dbfa11d53c3177a445375cfda",
+		"tsconfig.json": "3a9740ae9b6503149676c88f08f31191249235ae56ea1ed90ceb952a135bd3cf",
+		"vitest.config.ts": "101cfc570ea6b8b9b7a9c6a18f7601a535795a14971052c1f0a10a08bab8b8d8"
+	},
+	"modes": {
+		".editorconfig": "copy",
+		".gitattributes": "copy",
+		".nvmrc": "computed",
+		".oxfmtrc.json": "copy",
+		".oxlintrc.json": "copy",
+		"playwright.config.ts": "copy",
+		"pnpm-workspace.yaml": "computed",
+		"tsconfig.base.json": "copy",
+		"tsconfig.json": "copy",
+		"vitest.config.ts": "copy"
+	},
+	"options": {
+		"oxlintFlavor": "base",
+		"tsFlavor": "dom",
+		"typescriptLine": "7"
+	},
+	"schema": 4,
+	"units": [
+		{
+			"id": "core-editorconfig",
+			"source": {
+				"kind": "builtin"
+			}
+		},
+		{
+			"id": "core-gitattributes",
+			"source": {
+				"kind": "builtin"
+			}
+		},
+		{
+			"id": "core-node-version",
+			"source": {
+				"kind": "builtin"
+			}
+		},
+		{
+			"id": "core-oxlint",
+			"source": {
+				"kind": "builtin"
+			}
+		},
+		{
+			"id": "core-typescript",
+			"source": {
+				"kind": "builtin"
+			}
+		},
+		{
+			"id": "core-vitest",
+			"source": {
+				"kind": "builtin"
+			}
+		},
+		{
+			"id": "opt-playwright",
+			"source": {
+				"kind": "builtin"
+			}
+		}
+	],
+	"version": "3.1.0"
+}

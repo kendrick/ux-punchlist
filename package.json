@@ -1,0 +1,29 @@
+{
+	"name": "ux-punchlist",
+	"type": "module",
+	"version": "0.0.0",
+	"packageManager": "pnpm@12.18.0",
+	"engines": {
+		"node": ">=26"
+	},
+	"scripts": {
+		"format": "oxfmt",
+		"lint": "oxlint --no-error-on-unmatched-pattern",
+		"lint:fix": "oxlint --no-error-on-unmatched-pattern --fix",
+		"test": "vitest run",
+		"test:e2e": "playwright test",
+		"test:watch": "vitest",
+		"typecheck": "tsc --noEmit"
+	},
+	"devDependencies": {
+		"@axe-core/playwright": "4.14.0",
+		"@playwright/test": "1.65.0",
+		"@types/node": "26.6.6",
+		"jsdom": "31.0.0",
+		"oxfmt": "0.78.0",
+		"oxlint": "1.93.0",
+		"oxlint-tsgolint": "7.0.2006",
+		"typescript": "7.0.2",
+		"vitest": "5.1.0"
+	}
+}
