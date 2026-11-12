@@ -100,7 +100,12 @@ beforeEach(async () => {
 		else if (req.url === '/torn.html') {
 			res.writeHead(200, { 'content-type': 'text/html', 'content-length': '1000' });
 			res.write('<html>', () => res.destroy());
-		} else res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' }).end(HTML);
+		} else if (req.url === '/redirect' || req.url === '/redirect.html') {
+			const type = req.url.endsWith('.html') ? { 'content-type': 'text/html' } : {};
+			res.writeHead(302, { location: `${targetUrl}/login`, ...type }).end();
+		} else if (req.url === '/away')
+			res.writeHead(302, { location: 'http://elsewhere.example/' }).end();
+		else res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' }).end(HTML);
 	});
 	await new Promise<void>((r) => target.listen(0, '127.0.0.1', r));
 	targetUrl = `http://127.0.0.1:${(target.address() as AddressInfo).port}`;
@@ -236,6 +241,32 @@ describe('server', () => {
 		expect(res.status).toBe(200);
 		expect(captured).toEqual([`${targetUrl}//example.com/private`]);
 		expect(readEvents().at(-1)).toMatchObject({ pageUrl: `${targetUrl}//example.com/private` });
+	});
+
+	test('a request path naming another host is still proxied to the target', async () => {
+		const attacker = http.createServer((_req, res) => res.end('<script>attacker</script>'));
+		await new Promise<void>((r) => attacker.listen(0, '127.0.0.1', r));
+		try {
+			const host = `127.0.0.1:${(attacker.address() as AddressInfo).port}`;
+			for (const path of [`//${host}/payload`, `http://${host}/payload`]) {
+				const res = await rawGet(path);
+				expect(res.body).not.toContain('attacker');
+				expect(res.body).toContain('<h1>App</h1>');
+			}
+		} finally {
+			attacker.closeAllConnections();
+			await new Promise((r) => attacker.close(r));
+		}
+	});
+
+	test('a redirect to the target origin lands back on the proxy with the tray; an external one is untouched', async () => {
+		for (const path of ['/redirect', '/redirect.html']) {
+			const res = await fetch(`${app.url}${path}`);
+			expect(res.url).toBe(`${app.url}/login`);
+			expect(await res.text()).toContain('/__punchlist/tray.ts');
+		}
+		const away = await fetch(`${app.url}/away`, { redirect: 'manual' });
+		expect(away.headers.get('location')).toBe('http://elsewhere.example/');
 	});
 
 	test('a command upload or target response cut off mid-body leaves no unhandled rejection and the server up', async () => {

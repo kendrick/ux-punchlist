@@ -80,6 +80,14 @@ export async function startServer(opts: {
 	const store = openSession(opts.root, () => new Date().toISOString());
 	const target = new URL(opts.target);
 	const client = target.protocol === 'https:' ? https : http;
+	// Assign onto target rather than resolve: a "//host/x" or absolute path would resolve to another origin.
+	const onTarget = (pathname: string, search: string, hash = '') => {
+		const url = new URL(target);
+		url.pathname = pathname;
+		url.search = search;
+		url.hash = hash;
+		return url;
+	};
 	// Commands run one at a time so a slow screenshot can't let two commands claim the same seq.
 	let queue: Promise<unknown> = Promise.resolve();
 
@@ -107,12 +115,7 @@ export async function startServer(opts: {
 				const seq = store.state().lastSeq + 1;
 				const screenshot = `.review/screenshots/${seq}.png`;
 				// Log and capture the app's own URL: the proxy port dies on restart, and the proxied page has the tray over it.
-				// Assign onto target rather than resolve: a "//host/x" pathname would resolve to another origin.
-				const app = new URL(target);
-				app.pathname = page.pathname;
-				app.search = page.search;
-				app.hash = page.hash;
-				const pageUrl = app.href;
+				const pageUrl = onTarget(page.pathname, page.search, page.hash).href;
 				// The server picks the screenshot path, so a client can't aim the capture outside `.review/screenshots/`.
 				command = { ...command, screenshot, pageUrl };
 				decide(store.state(), command, ''); // reject a bad comment before paying for a capture
@@ -131,23 +134,31 @@ export async function startServer(opts: {
 	};
 
 	const proxy = (req: IncomingMessage, res: ServerResponse) => {
+		const raw = req.url ?? '/';
+		const q = raw.indexOf('?');
+		const url = q < 0 ? onTarget(raw, '') : onTarget(raw.slice(0, q), raw.slice(q));
 		const upstream = client.request(
-			new URL(req.url ?? '/', target),
+			url,
 			{
 				method: req.method,
 				headers: { ...req.headers, host: target.host, 'accept-encoding': 'identity' },
 			},
 			(up) => {
-				const type = up.headers['content-type'] ?? '';
-				const encoding = up.headers['content-encoding'];
+				const headers = { ...up.headers };
+				const location = headers.location && URL.parse(headers.location, url);
+				// A redirect straight to the target would leave the proxy and lose the tray; Host was vetted by the allowlist.
+				if (location && location.origin === target.origin)
+					headers.location = `http://${req.headers.host}${location.pathname}${location.search}${location.hash}`;
+				const type = headers['content-type'] ?? '';
+				const encoding = headers['content-encoding'];
 				if (!type.startsWith('text/html') || (encoding && encoding !== 'identity')) {
-					res.writeHead(up.statusCode ?? 502, up.headers);
+					res.writeHead(up.statusCode ?? 502, headers);
 					up.pipe(res);
 					return;
 				}
-				const { 'content-length': _len, ...headers } = up.headers;
+				const { 'content-length': _len, ...rest } = headers;
 				readBody(up).then(
-					(html) => res.writeHead(up.statusCode ?? 502, headers).end(injectTray(html)),
+					(html) => res.writeHead(up.statusCode ?? 502, rest).end(injectTray(html)),
 					() => res.destroy(), // target dropped mid-response; don't let it reject unhandled
 				);
 			},
