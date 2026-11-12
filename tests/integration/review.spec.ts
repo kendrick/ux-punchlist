@@ -1,6 +1,6 @@
 import { AxeBuilder } from '@axe-core/playwright';
 import { expect, test } from '@playwright/test';
-import { readFileSync } from 'node:fs';
+import { readFileSync, statSync } from 'node:fs';
 import { createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { join } from 'node:path';
@@ -246,4 +246,53 @@ test('the tray shows and works on a target whose CSP allows scripts only by nonc
 	await expect(
 		page.getByRole('region', { name: 'Review tray' }).getByText(`Item 1 of ${total}`),
 	).toBeVisible();
+});
+
+async function startWithTarget(html: string, headers: Record<string, string> = {}) {
+	const target = createServer((_req, res) =>
+		res.writeHead(200, { 'content-type': 'text/html', ...headers }).end(html),
+	);
+	await new Promise<void>((r) => target.listen(0, '127.0.0.1', r));
+	cleanup.push(() => {
+		target.closeAllConnections();
+		target.close();
+	});
+	const root = makeRoot();
+	const p = await startPunchlist(
+		root,
+		`http://127.0.0.1:${(target.address() as AddressInfo).port}`,
+	);
+	cleanup.push(() => p.kill());
+	return { ...p, root };
+}
+
+test('the tray is styled on a target whose CSP allows styles only from self', async ({ page }) => {
+	const html = readFileSync(join(appDir, 'index.html'), 'utf8');
+	const p = await startWithTarget(html, {
+		'content-security-policy': "script-src 'nonce-n0nce'; style-src 'self'",
+	});
+	await page.goto(p.url + '/');
+	const tray = page.getByRole('region', { name: 'Review tray' });
+	await expect(tray.getByText(`Item 1 of ${total}`)).toBeVisible();
+	await expect(tray).toHaveCSS('position', 'fixed');
+});
+
+test('Comment mode picks an inline SVG inside a link instead of following the link', async ({
+	page,
+}) => {
+	const p = await startWithTarget(
+		'<!doctype html><title>t</title><a href="/elsewhere"><svg width="60" height="60"><path d="M0 0h60v60H0z"/></svg></a>',
+	);
+	await page.goto(p.url + '/');
+	await page.getByRole('button', { name: 'Comment', exact: true }).click();
+	await page.locator('svg path').click();
+	await page.getByRole('textbox', { name: 'Comment' }).fill('Icon');
+	expect(new URL(page.url()).pathname).toBe('/');
+	await page.getByRole('button', { name: 'Pin comment' }).click();
+	await expect(page.getByText('1 comment', { exact: true })).toBeVisible();
+
+	const ev = readEvents(p.root).at(-1);
+	if (ev?.type !== 'comment-pinned') throw new Error(`unexpected event ${ev?.type}`);
+	expect(await page.locator(ev.selector).evaluate((el) => el.localName)).toBe('svg');
+	expect(statSync(join(p.root, ev.screenshot)).size).toBeGreaterThan(0);
 });

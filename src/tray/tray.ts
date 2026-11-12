@@ -20,15 +20,20 @@ const OUTLINE = '2px solid #ffd23f';
 let state: SessionState | null = null;
 let picked: Element | null = null;
 let picking = false;
-let hovered: HTMLElement | null = null;
+let hovered: HTMLElement | SVGElement | null = null;
 let error = '';
 // render() rebuilds the textarea, so a rejected pin would otherwise drop what the reviewer typed.
 let draft = '';
 // Module-level so a mid-flight render() (e.g. hashchange) still builds Pin comment disabled.
 let pinning = false;
 
+// A constructable sheet isn't an inline <style>, so the target's style-src can't block it.
+const sheet = new CSSStyleSheet();
+sheet.replaceSync(CSS);
+
 const host = document.createElement('punchlist-tray');
 const root = host.attachShadow({ mode: 'open' });
+root.adoptedStyleSheets = [sheet];
 document.body.append(host);
 
 const request = async (init?: { command: Command }): Promise<SessionState | null> => {
@@ -99,7 +104,7 @@ function render() {
 
 	if (!state?.started) {
 		tray.append(status);
-		root.replaceChildren(build('style', {}, [CSS]), tray);
+		root.replaceChildren(tray);
 		return;
 	}
 
@@ -175,16 +180,23 @@ function render() {
 	}
 
 	tray.append(status);
-	root.replaceChildren(build('style', {}, [CSS]), tray);
+	root.replaceChildren(tray);
 }
 
-const outsideTray = (target: EventTarget | null): target is HTMLElement =>
-	target instanceof HTMLElement && !target.closest('punchlist-tray');
+const pickable = (target: EventTarget | null): HTMLElement | SVGElement | null => {
+	let el = target;
+	// SVG children often paint no outline and can have no box to screenshot, so pick the outermost <svg>.
+	while (el instanceof SVGElement && el.ownerSVGElement) el = el.ownerSVGElement;
+	return (el instanceof HTMLElement || el instanceof SVGElement) && !el.closest('punchlist-tray')
+		? el
+		: null;
+};
 
 document.addEventListener('mouseover', (e) => {
-	if (!picking || !outsideTray(e.target)) return;
+	const el = pickable(e.target);
+	if (!picking || !el) return;
 	clearHover();
-	hovered = e.target;
+	hovered = el;
 	hovered.style.outline = OUTLINE;
 });
 
@@ -192,10 +204,11 @@ document.addEventListener('mouseover', (e) => {
 document.addEventListener(
 	'click',
 	(e) => {
-		if (!picking || !outsideTray(e.target)) return;
+		const el = pickable(e.target);
+		if (!picking || !el) return;
 		e.preventDefault();
 		e.stopPropagation();
-		picked = e.target;
+		picked = el;
 		setPicking(false);
 		root.querySelector('textarea')?.focus();
 	},
