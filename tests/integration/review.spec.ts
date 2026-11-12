@@ -1,5 +1,5 @@
 import { AxeBuilder } from '@axe-core/playwright';
-import { expect, test } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
 import { readFileSync, statSync } from 'node:fs';
 import { createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
@@ -295,4 +295,62 @@ test('Comment mode picks an inline SVG inside a link instead of following the li
 	if (ev?.type !== 'comment-pinned') throw new Error(`unexpected event ${ev?.type}`);
 	expect(await page.locator(ev.selector).evaluate((el) => el.localName)).toBe('svg');
 	expect(statSync(join(p.root, ev.screenshot)).size).toBeGreaterThan(0);
+});
+
+test('a pending pick is suspended, not pinned, while the browser is off the item URL', async ({
+	page,
+}) => {
+	const { punchlist } = await setup(
+		'items:\n  - id: plans\n    title: Plans\n    url: /pricing.html#plans\n',
+	);
+	await page.goto(punchlist.url + '/pricing.html#plans');
+	await page.getByRole('button', { name: 'Comment', exact: true }).click();
+	await page.locator('table').click();
+	await page.getByRole('textbox', { name: 'Comment' }).fill('Plans');
+	const pin = page.getByRole('button', { name: 'Pin comment' });
+	await expect(pin).toBeEnabled();
+
+	await page.evaluate(() => (location.hash = '#two'));
+	await expect(pin).toBeDisabled();
+
+	await page.evaluate(() => (location.hash = '#plans'));
+	await expect(pin).toBeEnabled();
+	await expect(page.getByRole('textbox', { name: 'Comment' })).toHaveValue('Plans');
+});
+
+const onePlan = 'items:\n  - id: plans\n    title: Plans\n    url: /pricing.html#plans\n';
+
+async function pickTable(page: Page, url: string) {
+	await page.goto(url + '/pricing.html#plans');
+	await page.getByRole('button', { name: 'Comment', exact: true }).click();
+	await page.locator('table').click();
+	await page.getByRole('textbox', { name: 'Comment' }).fill('Plans');
+}
+
+test('Pin comment refuses with a message after a pushState route change', async ({ page }) => {
+	const { root, punchlist } = await setup(onePlan);
+	await pickTable(page, punchlist.url);
+	await page.evaluate(() => history.pushState(null, '', '/pricing.html#elsewhere'));
+	await page.getByRole('button', { name: 'Pin comment' }).click();
+	await expect(page.getByText("Go back to the item's page")).toBeVisible();
+	expect(readEvents(root).filter((e) => e.type === 'comment-pinned')).toEqual([]);
+});
+
+test('Comment mode turns off when the browser leaves the item URL', async ({ page }) => {
+	const { punchlist } = await setup(onePlan);
+	await page.goto(punchlist.url + '/pricing.html#plans');
+	const comment = page.getByRole('button', { name: 'Comment', exact: true });
+	await comment.click();
+	await expect(comment).toHaveAttribute('aria-pressed', 'true');
+	await page.evaluate(() => (location.hash = '#two'));
+	await expect(comment).toHaveAttribute('aria-pressed', 'false');
+});
+
+test('Pin comment refuses a pick that was removed from the page', async ({ page }) => {
+	const { root, punchlist } = await setup(onePlan);
+	await pickTable(page, punchlist.url);
+	await page.evaluate(() => document.querySelector('table')?.remove());
+	await page.getByRole('button', { name: 'Pin comment' }).click();
+	await expect(page.getByText('That element is gone')).toBeVisible();
+	expect(readEvents(root).filter((e) => e.type === 'comment-pinned')).toEqual([]);
 });

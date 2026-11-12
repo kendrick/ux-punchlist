@@ -113,6 +113,11 @@ function render() {
 	const count = comments.filter((c) => c.itemId === item.id).length;
 	// A restart restores the position but not the page. Auto-navigating would yank reviewers off pages they followed a link to, so Comment stays disabled until the reviewer is on the item's page.
 	const here = isAt(item.url);
+	// The capture-phase pick handler still fires off the item's URL and would pick another route's element.
+	if (!here && picking) {
+		picking = false;
+		clearHover();
+	}
 	const go = async (to: number) => {
 		const target = items[to]!;
 		if (!(await send({ type: 'select', itemId: target.id }))) return;
@@ -153,6 +158,17 @@ function render() {
 			'Pin comment',
 			async () => {
 				if (pinning) return;
+				// pageUrl is read at click time, and pushState fires no event to disable the button, so recheck here.
+				if (!isAt(item.url)) {
+					error = "Go back to the item's page to pin this comment.";
+					return render();
+				}
+				// An SPA route change can detach the pick; cssPath on it would resolve to nothing.
+				if (!target.isConnected) {
+					picked = null;
+					error = 'That element is gone. Pick it again.';
+					return render();
+				}
 				pinning = true;
 				render();
 				const ok = await send({
@@ -168,13 +184,14 @@ function render() {
 					return null;
 				});
 				pinning = false;
-				if (ok) {
+				// Next mid-send may have started a new pick; don't wipe it.
+				if (ok && picked === target) {
 					picked = null;
 					draft = '';
 				}
 				render();
 			},
-			pinning,
+			pinning || !here,
 		);
 		tray.append(label, pin);
 	}
