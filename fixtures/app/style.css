@@ -1,0 +1,19 @@
+body {
+	font:
+		16px/1.5 system-ui,
+		sans-serif;
+	margin: 0;
+	padding: 16px 16px 160px;
+}
+.feature {
+	padding: 8px;
+	border: 1px solid #ccc;
+}
+table {
+	border-collapse: collapse;
+}
+td,
+th {
+	border: 1px solid #ccc;
+	padding: 4px 8px;
+}
