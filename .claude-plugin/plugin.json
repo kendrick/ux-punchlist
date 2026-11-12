@@ -1,0 +1,6 @@
+{
+	"name": "ux-punchlist",
+	"version": "0.1.0",
+	"description": "Review a running app one item at a time, with comments and approvals logged to an append-only file.",
+	"license": "MIT"
+}

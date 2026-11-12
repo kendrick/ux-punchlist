@@ -1,0 +1,8 @@
+items:
+  - id: home-hero
+    title: Home page hero
+    url: /
+    question: Does the hero say what the product does?
+  - id: pricing-table
+    title: Pricing table
+    url: /pricing.html
