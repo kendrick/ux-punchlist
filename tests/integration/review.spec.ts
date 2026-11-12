@@ -180,3 +180,39 @@ test('items whose URLs carry a fragment can be reached and commented on', async 
 		pageUrl: app.url + '/pricing.html#faq',
 	});
 });
+
+test('an unfinished comment is not carried to the next item that shares its URL', async ({
+	page,
+}) => {
+	const { root, punchlist } = await setup(
+		'items:\n  - id: one\n    title: One\n    url: /\n  - id: two\n    title: Two\n    url: /\n',
+	);
+	await page.goto(punchlist.url + '/');
+	await page.getByRole('button', { name: 'Comment', exact: true }).click();
+	await page.locator('h1').click();
+	await page.getByRole('textbox', { name: 'Comment' }).fill('For one');
+	await page.getByRole('button', { name: 'Next' }).click();
+	await expect(page.getByText('Item 2 of 2')).toBeVisible();
+	await expect(page.getByRole('button', { name: 'Pin comment' })).toHaveCount(0);
+	expect(readEvents(root).filter((e) => e.type === 'comment-pinned')).toEqual([]);
+});
+
+test('a double-clicked Pin comment pins once and stays disabled in flight', async ({ page }) => {
+	const { root, punchlist } = await setup();
+	let release!: () => void;
+	const held = new Promise<void>((r) => (release = r));
+	await page.route('**/__punchlist/commands', async (route) => {
+		if (route.request().postDataJSON().type === 'comment') await held;
+		await route.continue();
+	});
+	await page.goto(punchlist.url + '/');
+	await page.getByRole('button', { name: 'Comment', exact: true }).click();
+	await page.locator('h1').click();
+	await page.getByRole('textbox', { name: 'Comment' }).fill('Once');
+	const pin = page.getByRole('button', { name: 'Pin comment' });
+	await pin.dblclick();
+	await expect(pin).toBeDisabled();
+	release();
+	await expect(page.getByText('1 comment', { exact: true })).toBeVisible();
+	expect(readEvents(root).filter((e) => e.type === 'comment-pinned')).toHaveLength(1);
+});

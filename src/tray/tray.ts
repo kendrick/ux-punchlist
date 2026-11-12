@@ -24,6 +24,8 @@ let hovered: HTMLElement | null = null;
 let error = '';
 // render() rebuilds the textarea, so a rejected pin would otherwise drop what the reviewer typed.
 let draft = '';
+// Module-level so a mid-flight render() (e.g. hashchange) still builds Pin comment disabled.
+let pinning = false;
 
 const host = document.createElement('punchlist-tray');
 const root = host.attachShadow({ mode: 'open' });
@@ -109,6 +111,10 @@ function render() {
 	const go = async (to: number) => {
 		const target = items[to]!;
 		if (!(await send({ type: 'select', itemId: target.id }))) return;
+		// A pending pick belongs to the item it started on; two items can share a URL.
+		picked = null;
+		draft = '';
+		render();
 		if (!isAt(target.url)) location.assign(target.url);
 	};
 
@@ -138,22 +144,33 @@ function render() {
 		text.addEventListener('input', () => (draft = text.value));
 		const label = document.createElement('label');
 		label.append('Comment', text);
-		const pin = button('Pin comment', async () => {
-			const ok = await send({
-				type: 'comment',
-				itemId: item.id,
-				selector: cssPath(target),
-				text: text.value,
-				// `Command` requires the field; the server overwrites it with its own capture path.
-				screenshot: '',
-				pageUrl: location.href,
-			});
-			if (ok) {
-				picked = null;
-				draft = '';
-			}
-			render();
-		});
+		const pin = button(
+			'Pin comment',
+			async () => {
+				if (pinning) return;
+				pinning = true;
+				render();
+				const ok = await send({
+					type: 'comment',
+					itemId: item.id,
+					selector: cssPath(target),
+					text: text.value,
+					// `Command` requires the field; the server overwrites it with its own capture path.
+					screenshot: '',
+					pageUrl: location.href,
+				}).catch(() => {
+					error = 'Could not reach the punchlist server.';
+					return null;
+				});
+				pinning = false;
+				if (ok) {
+					picked = null;
+					draft = '';
+				}
+				render();
+			},
+			pinning,
+		);
 		tray.append(label, pin);
 	}
 
