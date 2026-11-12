@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { injectTray, scriptNonce } from '../../src/server/inject.ts';
+import { allowTrayConnect, injectTray, scriptNonce } from '../../src/server/inject.ts';
 
 const TAG = '<script type="module" src="/__punchlist/tray.ts"></script>';
 
@@ -45,5 +45,35 @@ describe('nonce', () => {
 
 	test('scriptNonce handles an absent header', () => {
 		expect(scriptNonce(undefined)).toBeUndefined();
+	});
+});
+
+describe('allowTrayConnect', () => {
+	const o = 'http://127.0.0.1:1234';
+	const t = `${o}/__punchlist/`;
+	test.each([
+		["connect-src 'none'", `connect-src ${t}`],
+		[
+			"script-src 'nonce-n'; connect-src 'none'; img-src *",
+			`script-src 'nonce-n'; connect-src ${t}; img-src *`,
+		],
+		["connect-src 'self' https://api.x", `connect-src 'self' https://api.x ${t}`],
+		["default-src 'self'", `default-src 'self'; connect-src 'self' ${t}`],
+		["default-src 'none'; img-src *", `default-src 'none'; connect-src ${t}; img-src *`],
+		["connect-src 'none'; default-src 'self'", `connect-src ${t}; default-src 'self'`],
+		["script-src 'self'; img-src *", "script-src 'self'; img-src *"],
+	])('%s', (csp, out) => {
+		expect(allowTrayConnect(csp, o)).toBe(out);
+	});
+
+	test('widens each policy in an array', () => {
+		expect(allowTrayConnect(["connect-src 'none'", "default-src 'self'"], o)).toEqual([
+			`connect-src ${t}`,
+			`default-src 'self'; connect-src 'self' ${t}`,
+		]);
+	});
+
+	test('undefined stays undefined', () => {
+		expect(allowTrayConnect(undefined, o)).toBeUndefined();
 	});
 });

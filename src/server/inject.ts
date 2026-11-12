@@ -15,6 +15,43 @@ export function scriptNonce(csp: string | string[] | undefined): string | undefi
 	return undefined;
 }
 
+// The tray fetches /__punchlist/*; a connect-src (or default-src fallback) that omits it breaks the tray. Widen to that path only, never 'self' or *.
+export function allowTrayConnect(
+	csp: string | string[] | undefined,
+	origin: string,
+): string | string[] | undefined {
+	const src = `${origin}/__punchlist/`;
+	const widen = (policy: string) => {
+		const dirs = policy.split(';');
+		const find = (name: string) =>
+			dirs.findIndex((d) => d.trim().split(/\s+/)[0]?.toLowerCase() === name);
+		const sources = (i: number) => dirs[i]!.trim().split(/\s+/).slice(1);
+		const onlyNone = (i: number) =>
+			sources(i).length === 1 && sources(i)[0]!.toLowerCase() === "'none'";
+		const connect = find('connect-src');
+		if (connect >= 0)
+			dirs[connect] = onlyNone(connect)
+				? dirs[connect]!.replace(/'none'/i, src)
+				: `${dirs[connect]!.trimEnd()} ${src}`;
+		else {
+			const def = find('default-src');
+			if (def >= 0)
+				dirs.splice(
+					def + 1,
+					0,
+					` connect-src ${onlyNone(def) ? src : [...sources(def), src].join(' ')}`,
+				);
+		}
+		return dirs.join(';');
+	};
+	const widenHeader = (v: string) => v.split(',').map(widen).join(',');
+	return Array.isArray(csp)
+		? csp.map(widenHeader)
+		: csp === undefined
+			? undefined
+			: widenHeader(csp);
+}
+
 export function injectTray(html: string, nonce?: string): string {
 	const tag = `<script type="module" ${nonce ? `nonce="${nonce}" ` : ''}${SRC}></script>`;
 	const at = html.toLowerCase().lastIndexOf('</body>');

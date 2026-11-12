@@ -5,7 +5,7 @@ import { stripTypeScriptTypes } from 'node:module';
 import { join } from 'node:path';
 import type { Command } from '../core/events.ts';
 import { CommandError, decide } from '../core/session.ts';
-import { injectTray, scriptNonce } from './inject.ts';
+import { allowTrayConnect, injectTray, scriptNonce } from './inject.ts';
 import type { Screenshotter } from './screenshot.ts';
 import { openSession } from './session-store.ts';
 
@@ -157,6 +157,12 @@ export async function startServer(opts: {
 					return;
 				}
 				const { 'content-length': _len, ...rest } = headers;
+				// The tray's fetches to /__punchlist/ must pass the target's connect-src; its report-only policy never blocks, so it stays as sent.
+				if (rest['content-security-policy'] !== undefined)
+					rest['content-security-policy'] = allowTrayConnect(
+						rest['content-security-policy'],
+						`http://${req.headers.host}`,
+					);
 				readBody(up).then(
 					(html) =>
 						res

@@ -277,6 +277,53 @@ test('the tray is styled on a target whose CSP allows styles only from self', as
 	await expect(tray).toHaveCSS('position', 'fixed');
 });
 
+test('the tray works under connect-src none while the target stays blocked from other paths', async ({
+	page,
+}) => {
+	const html = readFileSync(join(appDir, 'index.html'), 'utf8');
+	const p = await startWithTarget(html, {
+		'content-security-policy': "script-src 'nonce-n0nce'; connect-src 'none'",
+	});
+	await page.goto(p.url + '/');
+	const tray = page.getByRole('region', { name: 'Review tray' });
+	await expect(tray.getByText(`Item 1 of ${total}`)).toBeVisible();
+	await tray.getByRole('button', { name: 'Approve' }).click();
+	await expect(tray.getByText('Approved')).toBeVisible();
+	expect(
+		await page.evaluate(() =>
+			fetch('/elsewhere').then(
+				() => 'ok',
+				() => 'blocked',
+			),
+		),
+	).toBe('blocked');
+});
+
+test('the tray works under default-src none, and the target stays blocked outside /__punchlist/', async ({
+	page,
+}) => {
+	const html = readFileSync(join(appDir, 'index.html'), 'utf8');
+	const p = await startWithTarget(html, {
+		'content-security-policy': "default-src 'none'; script-src 'nonce-n0nce'",
+	});
+	await page.goto(p.url + '/');
+	const tray = page.getByRole('region', { name: 'Review tray' });
+	await expect(tray.getByText(`Item 1 of ${total}`)).toBeVisible();
+	await tray.getByRole('button', { name: 'Approve' }).click();
+	await expect(tray.getByText('Approved')).toBeVisible();
+	const probe = (url: string) =>
+		page.evaluate(
+			(u) =>
+				fetch(u).then(
+					(r) => r.status,
+					() => 'blocked',
+				),
+			url,
+		);
+	expect(await probe('/elsewhere')).toBe('blocked');
+	expect(await probe('/__punchlist')).toBe('blocked');
+});
+
 test('Comment mode picks an inline SVG inside a link instead of following the link', async ({
 	page,
 }) => {
