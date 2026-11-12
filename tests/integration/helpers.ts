@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process';
-import { cpSync, mkdirSync, mkdtempSync, readFileSync } from 'node:fs';
+import { cpSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { ReviewEvent } from '../../src/core/events.ts';
@@ -10,10 +10,11 @@ const repo = join(import.meta.dirname, '..', '..');
 export const manifestPath = join(repo, 'fixtures', 'manifest.yaml');
 export const appDir = join(repo, 'fixtures', 'app');
 
-export function makeRoot(): string {
+export function makeRoot(manifest?: string): string {
 	const root = mkdtempSync(join(tmpdir(), 'punchlist-e2e-'));
 	mkdirSync(join(root, '.review'));
-	cpSync(manifestPath, join(root, '.review', 'manifest.yaml'));
+	if (manifest) writeFileSync(join(root, '.review', 'manifest.yaml'), manifest);
+	else cpSync(manifestPath, join(root, '.review', 'manifest.yaml'));
 	return root;
 }
 

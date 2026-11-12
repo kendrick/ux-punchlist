@@ -81,6 +81,15 @@ const button = (label: string, onClick: () => void, disabled = false) => {
 	return b;
 };
 
+// A fragment in the item URL must match (hash routes, anchors); without one, an in-page anchor jump still counts as here.
+const isAt = (url: string) => {
+	const u = new URL(url, location.href);
+	return (
+		u.pathname + u.search === location.pathname + location.search &&
+		(!u.hash || u.hash === location.hash)
+	);
+};
+
 function render() {
 	const tray = build('div', { className: 'tray', role: 'region' }, []);
 	tray.setAttribute('aria-label', 'Review tray');
@@ -96,11 +105,11 @@ function render() {
 	const item = items[position]!;
 	const count = comments.filter((c) => c.itemId === item.id).length;
 	// A restart restores the position but not the page. Auto-navigating would yank reviewers off pages they followed a link to, so Comment stays disabled until the reviewer is on the item's page.
-	const here = item.url === location.pathname + location.search;
+	const here = isAt(item.url);
 	const go = async (to: number) => {
 		const target = items[to]!;
 		if (!(await send({ type: 'select', itemId: target.id }))) return;
-		if (target.url !== location.pathname + location.search) location.assign(target.url);
+		if (!isAt(target.url)) location.assign(target.url);
 	};
 
 	tray.append(
@@ -175,6 +184,9 @@ document.addEventListener(
 	},
 	true,
 );
+
+// Hash-only navigation doesn't reload the page, so the tray has to re-check isAt itself.
+window.addEventListener('hashchange', render);
 
 document.addEventListener('keydown', (e) => {
 	if (e.key === 'Escape' && picking) setPicking(false);

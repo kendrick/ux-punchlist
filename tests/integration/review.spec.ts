@@ -22,8 +22,8 @@ test.afterEach(async () => {
 	cleanup = [];
 });
 
-async function setup() {
-	const root = makeRoot();
+async function setup(manifest?: string) {
+	const root = makeRoot(manifest);
 	const app = await serveStatic(appDir, 0);
 	cleanup.push(() => app.close());
 	const start = async () => {
@@ -150,4 +150,33 @@ test('the tray has no axe violations', async ({ page }) => {
 	await expect(page.getByText('Item 1 of')).toBeVisible();
 	const { violations } = await new AxeBuilder({ page }).include('punchlist-tray').analyze();
 	expect(violations).toEqual([]);
+});
+
+test('items whose URLs carry a fragment can be reached and commented on', async ({ page }) => {
+	const { root, app, punchlist } = await setup(
+		'items:\n  - id: plans\n    title: Plans\n    url: /pricing.html#plans\n' +
+			'  - id: faq\n    title: FAQ\n    url: /pricing.html#faq\n',
+	);
+	const comment = page.getByRole('button', { name: 'Comment', exact: true });
+	await page.goto(punchlist.url + '/');
+	await expect(page.getByText('Item 1 of 2')).toBeVisible();
+	await page.getByRole('button', { name: 'Go to item' }).click();
+	await page.waitForURL('**/pricing.html#plans');
+	await expect(comment).toBeEnabled();
+
+	// Same document, new fragment: no reload, so only hashchange can re-enable Comment.
+	await page.getByRole('button', { name: 'Next' }).click();
+	await page.waitForURL('**/pricing.html#faq');
+	await expect(page.getByText('Item 2 of 2')).toBeVisible();
+	await expect(comment).toBeEnabled();
+	await comment.click();
+	await page.locator('table').click();
+	await page.getByRole('textbox', { name: 'Comment' }).fill('FAQ');
+	await page.getByRole('button', { name: 'Pin comment' }).click();
+	await expect(page.getByText('1 comment', { exact: true })).toBeVisible();
+	expect(readEvents(root).at(-1)).toMatchObject({
+		type: 'comment-pinned',
+		itemId: 'faq',
+		pageUrl: app.url + '/pricing.html#faq',
+	});
 });

@@ -11,7 +11,7 @@ import {
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
 import http, { type IncomingHttpHeaders } from 'node:http';
-import type { AddressInfo } from 'node:net';
+import { connect, type AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, test } from 'vitest';
@@ -97,7 +97,10 @@ beforeEach(async () => {
 	target = http.createServer((req, res) => {
 		seen.push(req.headers);
 		if (req.url === '/style.css') res.writeHead(200, { 'content-type': 'text/css' }).end(CSS);
-		else res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' }).end(HTML);
+		else if (req.url === '/torn.html') {
+			res.writeHead(200, { 'content-type': 'text/html', 'content-length': '1000' });
+			res.write('<html>', () => res.destroy());
+		} else res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' }).end(HTML);
 	});
 	await new Promise<void>((r) => target.listen(0, '127.0.0.1', r));
 	targetUrl = `http://127.0.0.1:${(target.address() as AddressInfo).port}`;
@@ -219,6 +222,45 @@ describe('server', () => {
 		expect(captured).toEqual([]);
 		expect(existsSync(join(root, '.review', 'screenshots'))).toBe(false);
 		expect(readFileSync(logPath()).equals(before)).toBe(true);
+	});
+
+	test('a pageUrl whose path starts with // is captured and logged on the target origin', async () => {
+		const res = await post({
+			type: 'comment',
+			itemId: 'home-hero',
+			selector: 'h1',
+			text: 'x',
+			screenshot: '',
+			pageUrl: `${app.url}//example.com/private`,
+		});
+		expect(res.status).toBe(200);
+		expect(captured).toEqual([`${targetUrl}//example.com/private`]);
+		expect(readEvents().at(-1)).toMatchObject({ pageUrl: `${targetUrl}//example.com/private` });
+	});
+
+	test('a command upload or target response cut off mid-body leaves no unhandled rejection and the server up', async () => {
+		const rejections: unknown[] = [];
+		const onRejection = (e: unknown) => rejections.push(e);
+		process.on('unhandledRejection', onRejection);
+		try {
+			const { hostname, port } = new URL(app.url);
+			const sock = connect(Number(port), hostname);
+			await once(sock, 'connect');
+			sock.write(
+				`POST /__punchlist/commands HTTP/1.1\r\nHost: ${hostname}:${port}\r\n` +
+					'Content-Type: application/json\r\nContent-Length: 1000\r\n\r\n{"type":',
+			);
+			await new Promise((r) => setTimeout(r, 50));
+			sock.destroy();
+			await expect(
+				fetch(`${app.url}/torn.html`, { signal: AbortSignal.timeout(2000) }),
+			).rejects.toThrow();
+			await new Promise((r) => setTimeout(r, 50));
+			expect(rejections).toEqual([]);
+			expect((await fetch(`${app.url}/__punchlist/state`)).status).toBe(200);
+		} finally {
+			process.off('unhandledRejection', onRejection);
+		}
 	});
 
 	test('a comment sent through localhost is accepted when Host matches', async () => {

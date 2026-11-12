@@ -91,7 +91,8 @@ export async function startServer(opts: {
 		try {
 			text = await readBody(req, MAX_COMMAND_BYTES);
 		} catch (e) {
-			if (!(e instanceof TooLarge)) throw e;
+			// The client hung up mid-upload; rethrowing would be an unhandled rejection that kills the server.
+			if (!(e instanceof TooLarge)) return void res.destroy();
 			// Close the socket after replying so the rest of the upload is never read.
 			res.setHeader('connection', 'close');
 			return send(res, 413, { error: 'body is larger than 1 MiB' });
@@ -106,7 +107,12 @@ export async function startServer(opts: {
 				const seq = store.state().lastSeq + 1;
 				const screenshot = `.review/screenshots/${seq}.png`;
 				// Log and capture the app's own URL: the proxy port dies on restart, and the proxied page has the tray over it.
-				const pageUrl = new URL(page.pathname + page.search + page.hash, target).href;
+				// Assign onto target rather than resolve: a "//host/x" pathname would resolve to another origin.
+				const app = new URL(target);
+				app.pathname = page.pathname;
+				app.search = page.search;
+				app.hash = page.hash;
+				const pageUrl = app.href;
 				// The server picks the screenshot path, so a client can't aim the capture outside `.review/screenshots/`.
 				command = { ...command, screenshot, pageUrl };
 				decide(store.state(), command, ''); // reject a bad comment before paying for a capture
@@ -131,7 +137,7 @@ export async function startServer(opts: {
 				method: req.method,
 				headers: { ...req.headers, host: target.host, 'accept-encoding': 'identity' },
 			},
-			async (up) => {
+			(up) => {
 				const type = up.headers['content-type'] ?? '';
 				const encoding = up.headers['content-encoding'];
 				if (!type.startsWith('text/html') || (encoding && encoding !== 'identity')) {
@@ -140,7 +146,10 @@ export async function startServer(opts: {
 					return;
 				}
 				const { 'content-length': _len, ...headers } = up.headers;
-				res.writeHead(up.statusCode ?? 502, headers).end(injectTray(await readBody(up)));
+				readBody(up).then(
+					(html) => res.writeHead(up.statusCode ?? 502, headers).end(injectTray(html)),
+					() => res.destroy(), // target dropped mid-response; don't let it reject unhandled
+				);
 			},
 		);
 		upstream.on('error', (e) => {
@@ -162,7 +171,8 @@ export async function startServer(opts: {
 		if (path.startsWith('/__punchlist/')) {
 			const name = path.slice('/__punchlist/'.length);
 			if (req.method === 'GET' && name === 'state') return send(res, 200, store.state());
-			if (req.method === 'POST' && name === 'commands') return void handleCommand(req, res);
+			if (req.method === 'POST' && name === 'commands')
+				return void handleCommand(req, res).catch(() => res.destroy()); // an unhandled rejection would end the whole session
 			if (req.method === 'GET' && name.endsWith('.ts')) return serveTray(name, res);
 			return send(res, 404, { error: 'not found' });
 		}
