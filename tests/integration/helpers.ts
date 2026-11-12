@@ -3,6 +3,7 @@ import { cpSync, mkdirSync, mkdtempSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { ReviewEvent } from '../../src/core/events.ts';
+import { readLog } from '../../src/core/log.ts';
 
 const repo = join(import.meta.dirname, '..', '..');
 
@@ -43,7 +44,4 @@ export const readLogBytes = (root: string): string =>
 	readFileSync(join(root, '.review', 'events.jsonl'), 'utf8');
 
 export const readEvents = (root: string): ReviewEvent[] =>
-	readLogBytes(root)
-		.split('\n')
-		.filter(Boolean)
-		.map((l) => JSON.parse(l));
+	readLog(join(root, '.review', 'events.jsonl'));

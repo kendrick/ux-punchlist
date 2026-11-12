@@ -67,14 +67,23 @@ export async function startServer(opts: {
 	let queue: Promise<unknown> = Promise.resolve();
 
 	const handleCommand = async (req: IncomingMessage, res: ServerResponse) => {
+		// Any other type is a "simple" cross-site POST with no preflight; JSON forces one, and with no CORS headers the browser blocks it.
+		if (req.headers['content-type']?.split(';')[0]?.trim().toLowerCase() !== 'application/json')
+			return send(res, 400, { error: 'content-type must be application/json' });
 		const text = await readBody(req);
 		const job = queue.then(async () => {
 			let command = parseCommand(text);
 			if (command.type === 'comment') {
+				const page = URL.parse(command.pageUrl);
+				// Keeps headless Chromium off arbitrary URLs; Host, not a fixed origin, so localhost and 127.0.0.1 both work.
+				if (!page || page.host !== req.headers.host)
+					throw new CommandError('pageUrl must be a page on this review server');
 				const seq = store.state().lastSeq + 1;
 				const screenshot = `.review/screenshots/${seq}.png`;
+				// Log and capture the app's own URL: the proxy port dies on restart, and the proxied page has the tray over it.
+				const pageUrl = new URL(page.pathname + page.search + page.hash, target).href;
 				// Never trust the client's screenshot value.
-				command = { ...command, screenshot };
+				command = { ...command, screenshot, pageUrl };
 				decide(store.state(), command, ''); // reject a bad comment before paying for a capture
 				mkdirSync(join(opts.root, '.review', 'screenshots'), { recursive: true });
 				await opts.capture(command.pageUrl, command.selector, join(opts.root, screenshot));

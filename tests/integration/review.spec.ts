@@ -31,7 +31,7 @@ async function setup() {
 		cleanup.push(() => p.kill());
 		return p;
 	};
-	return { root, start, punchlist: await start() };
+	return { root, app, start, punchlist: await start() };
 }
 
 test('shows Item 1 of N', async ({ page }) => {
@@ -46,7 +46,7 @@ test('shows Item 1 of N', async ({ page }) => {
 test('pinning a comment appends one event with item, selector, text, screenshot and page URL', async ({
 	page,
 }) => {
-	const { root, punchlist } = await setup();
+	const { root, app, punchlist } = await setup();
 	await page.goto(punchlist.url + '/');
 	await expect(page.getByText('Item 1 of')).toBeVisible();
 	const before = readEvents(root).length;
@@ -63,7 +63,7 @@ test('pinning a comment appends one event with item, selector, text, screenshot 
 	if (ev.type !== 'comment-pinned') throw new Error(`unexpected event ${ev.type}`);
 	expect(ev.itemId).toBe('home-hero');
 	expect(ev.text).toBe('Too vague');
-	expect(ev.pageUrl).toBe(page.url());
+	expect(ev.pageUrl).toBe(app.url + '/');
 	// Same element, not just any .feature: the two siblings are identical, so compare by index.
 	const index = await page
 		.locator('.feature')
@@ -113,8 +113,14 @@ test('killing and restarting the plugin restores position, comments and approval
 
 	punchlist.kill();
 	const restarted = await start();
-	await page.goto(restarted.url + '/pricing.html');
+	await page.goto(restarted.url + '/');
 	await expect(page.getByText('Item 2 of 2')).toBeVisible();
+	await expect(page.getByRole('button', { name: 'Comment', exact: true })).toBeDisabled();
+	await page.getByRole('button', { name: 'Go to item' }).click();
+	await page.waitForURL('**/pricing.html');
+	await expect(page.getByText('Item 2 of 2')).toBeVisible();
+	await expect(page.getByRole('button', { name: 'Comment', exact: true })).toBeEnabled();
+	await expect(page.getByRole('button', { name: 'Go to item' })).toHaveCount(0);
 	await expect(page.getByText('Approved', { exact: true })).toBeVisible();
 	await expect(page.getByText('1 comment', { exact: true })).toBeVisible();
 	snap();
@@ -122,6 +128,20 @@ test('killing and restarting the plugin restores position, comments and approval
 	for (let i = 1; i < snapshots.length; i++)
 		expect(snapshots[i].startsWith(snapshots[i - 1])).toBe(true);
 	expect(snapshots.at(-1).length).toBeGreaterThan(snapshots[0].length);
+});
+
+test('a rejected comment keeps the typed text', async ({ page }) => {
+	const { punchlist } = await setup();
+	await page.route('**/__punchlist/commands', (route) =>
+		route.fulfill({ status: 500, contentType: 'application/json', body: '{"error":"boom"}' }),
+	);
+	await page.goto(punchlist.url + '/');
+	await page.getByRole('button', { name: 'Comment', exact: true }).click();
+	await page.locator('h1').click();
+	await page.getByRole('textbox', { name: 'Comment' }).fill('Keep me');
+	await page.getByRole('button', { name: 'Pin comment' }).click();
+	await expect(page.getByText('boom')).toBeVisible();
+	await expect(page.getByRole('textbox', { name: 'Comment' })).toHaveValue('Keep me');
 });
 
 test('the tray has no axe violations', async ({ page }) => {

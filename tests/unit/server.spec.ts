@@ -26,6 +26,7 @@ let root: string;
 let target: http.Server;
 let targetUrl: string;
 let seen: IncomingHttpHeaders[];
+let captured: string[];
 let app: Awaited<ReturnType<typeof startServer>>;
 
 const logPath = () => join(root, '.review', 'events.jsonl');
@@ -47,6 +48,22 @@ const rawGet = (path: string) =>
 			.on('error', reject);
 	});
 
+// Raw http.request so the test can set Host and content-type, which fetch would fix for us.
+const rawPost = (body: string, headers: Record<string, string>) =>
+	new Promise<number>((resolve, reject) => {
+		const { hostname, port } = new URL(app.url);
+		http
+			.request(
+				{ host: hostname, port, path: '/__punchlist/commands', method: 'POST', headers },
+				(res) => {
+					res.resume();
+					res.on('end', () => resolve(res.statusCode ?? 0));
+				},
+			)
+			.on('error', reject)
+			.end(body);
+	});
+
 const post = (command: unknown) =>
 	fetch(`${app.url}/__punchlist/commands`, {
 		method: 'POST',
@@ -62,6 +79,7 @@ beforeEach(async () => {
 		join(root, '.review', 'manifest.yaml'),
 	);
 	seen = [];
+	captured = [];
 	target = http.createServer((req, res) => {
 		seen.push(req.headers);
 		if (req.url === '/style.css') res.writeHead(200, { 'content-type': 'text/css' }).end(CSS);
@@ -73,7 +91,10 @@ beforeEach(async () => {
 		root,
 		target: targetUrl,
 		port: 0,
-		capture: async (_url, _selector, outPath) => writeFileSync(outPath, 'PNG'),
+		capture: async (url, _selector, outPath) => {
+			captured.push(url);
+			writeFileSync(outPath, 'PNG');
+		},
 	});
 });
 
@@ -121,7 +142,7 @@ describe('server', () => {
 			selector: 'h1',
 			text: 'Too vague',
 			screenshot: 'client-supplied.png',
-			pageUrl: `${app.url}/`,
+			pageUrl: `${app.url}/pricing.html?tab=2#plans`,
 		});
 		expect(res.status).toBe(200);
 		const events = readEvents();
@@ -132,9 +153,10 @@ describe('server', () => {
 			itemId: 'home-hero',
 			selector: 'h1',
 			text: 'Too vague',
-			pageUrl: `${app.url}/`,
+			pageUrl: `${targetUrl}/pricing.html?tab=2#plans`,
 			screenshot: `.review/screenshots/${last?.seq}.png`,
 		});
+		expect(captured).toEqual([`${targetUrl}/pricing.html?tab=2#plans`]);
 		expect(
 			readFileSync(join(root, last?.type === 'comment-pinned' ? last.screenshot : ''), 'utf8'),
 		).toBe('PNG');
@@ -151,11 +173,56 @@ describe('server', () => {
 
 	test('POST with bad JSON or an unknown item returns 400 and appends nothing', async () => {
 		const before = readFileSync(logPath());
-		const bad = await fetch(`${app.url}/__punchlist/commands`, { method: 'POST', body: '{nope' });
+		const bad = await fetch(`${app.url}/__punchlist/commands`, {
+			method: 'POST',
+			headers: { 'content-type': 'application/json' },
+			body: '{nope',
+		});
 		expect(bad.status).toBe(400);
 		expect((await post({ type: 'select', itemId: 'ghost' })).status).toBe(400);
 		expect(existsSync(join(root, '.review', 'screenshots'))).toBe(false);
 		expect(readFileSync(logPath()).equals(before)).toBe(true);
+	});
+
+	test('POST without a JSON content-type, or a comment for another host, returns 400 and appends nothing', async () => {
+		const before = readFileSync(logPath());
+		const approve = JSON.stringify({ type: 'approve', itemId: 'home-hero' });
+		expect(await rawPost(approve, { 'content-type': 'text/plain' })).toBe(400);
+		expect(await rawPost(approve, {})).toBe(400);
+		for (const pageUrl of ['http://evil.example/', 'http://10.0.0.1/admin', 'not a url'])
+			expect(
+				(
+					await post({
+						type: 'comment',
+						itemId: 'home-hero',
+						selector: 'h1',
+						text: 'x',
+						screenshot: '',
+						pageUrl,
+					})
+				).status,
+			).toBe(400);
+		expect(captured).toEqual([]);
+		expect(existsSync(join(root, '.review', 'screenshots'))).toBe(false);
+		expect(readFileSync(logPath()).equals(before)).toBe(true);
+	});
+
+	test('a comment sent through localhost is accepted when Host matches', async () => {
+		const port = new URL(app.url).port;
+		const body = JSON.stringify({
+			type: 'comment',
+			itemId: 'home-hero',
+			selector: 'h1',
+			text: 'x',
+			screenshot: '',
+			pageUrl: `http://localhost:${port}/`,
+		});
+		const headers = {
+			'content-type': 'application/json; charset=utf-8',
+			host: `localhost:${port}`,
+		};
+		expect(await rawPost(body, headers)).toBe(200);
+		expect(readEvents().at(-1)).toMatchObject({ type: 'comment-pinned', pageUrl: `${targetUrl}/` });
 	});
 });
 

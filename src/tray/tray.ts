@@ -22,6 +22,8 @@ let picked: Element | null = null;
 let picking = false;
 let hovered: HTMLElement | null = null;
 let error = '';
+// render() rebuilds the textarea, so a rejected pin would otherwise drop what the reviewer typed.
+let draft = '';
 
 const host = document.createElement('punchlist-tray');
 const root = host.attachShadow({ mode: 'open' });
@@ -93,6 +95,8 @@ function render() {
 	const { items, position, approved, comments } = state;
 	const item = items[position]!;
 	const count = comments.filter((c) => c.itemId === item.id).length;
+	// A restart restores the position but not the page; never auto-navigate, but block comments filed under the wrong item.
+	const here = item.url === location.pathname + location.search;
 	const go = async (to: number) => {
 		const target = items[to]!;
 		if (!(await send({ type: 'select', itemId: target.id }))) return;
@@ -112,7 +116,8 @@ function render() {
 			: button('Approve', () => send({ type: 'approve', itemId: item.id })),
 	);
 
-	const pick = button('Comment', () => setPicking(!picking));
+	if (!here) tray.append(button('Go to item', () => location.assign(item.url)));
+	const pick = button('Comment', () => setPicking(!picking), !here);
 	pick.setAttribute('aria-pressed', String(picking));
 	tray.append(pick, build('span', {}, [`${count} comment${count === 1 ? '' : 's'}`]));
 
@@ -120,6 +125,8 @@ function render() {
 		const target = picked;
 		const text = document.createElement('textarea');
 		text.rows = 2;
+		text.value = draft;
+		text.addEventListener('input', () => (draft = text.value));
 		const label = document.createElement('label');
 		label.append('Comment', text);
 		const pin = button('Pin comment', async () => {
@@ -132,7 +139,10 @@ function render() {
 				screenshot: '',
 				pageUrl: location.href,
 			});
-			if (ok) picked = null;
+			if (ok) {
+				picked = null;
+				draft = '';
+			}
 			render();
 		});
 		tray.append(label, pin);
