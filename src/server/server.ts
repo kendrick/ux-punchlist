@@ -5,7 +5,7 @@ import { stripTypeScriptTypes } from 'node:module';
 import { join } from 'node:path';
 import type { Command } from '../core/events.ts';
 import { CommandError, decide } from '../core/session.ts';
-import { injectTray } from './inject.ts';
+import { injectTray, scriptNonce } from './inject.ts';
 import type { Screenshotter } from './screenshot.ts';
 import { openSession } from './session-store.ts';
 
@@ -158,7 +158,10 @@ export async function startServer(opts: {
 				}
 				const { 'content-length': _len, ...rest } = headers;
 				readBody(up).then(
-					(html) => res.writeHead(up.statusCode ?? 502, rest).end(injectTray(html)),
+					(html) =>
+						res
+							.writeHead(up.statusCode ?? 502, rest)
+							.end(injectTray(html, scriptNonce(up.headers['content-security-policy']))),
 					() => res.destroy(), // target dropped mid-response; don't let it reject unhandled
 				);
 			},

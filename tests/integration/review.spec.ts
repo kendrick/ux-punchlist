@@ -1,6 +1,8 @@
 import { AxeBuilder } from '@axe-core/playwright';
 import { expect, test } from '@playwright/test';
 import { readFileSync } from 'node:fs';
+import { createServer } from 'node:http';
+import type { AddressInfo } from 'node:net';
 import { join } from 'node:path';
 import { parseManifest } from '../../src/core/manifest.ts';
 import { serveStatic } from '../../fixtures/serve.ts';
@@ -215,4 +217,33 @@ test('a double-clicked Pin comment pins once and stays disabled in flight', asyn
 	release();
 	await expect(page.getByText('1 comment', { exact: true })).toBeVisible();
 	expect(readEvents(root).filter((e) => e.type === 'comment-pinned')).toHaveLength(1);
+});
+
+test('the tray shows and works on a target whose CSP allows scripts only by nonce', async ({
+	page,
+}) => {
+	const root = makeRoot();
+	const html = readFileSync(join(appDir, 'index.html'), 'utf8');
+	const target = createServer((_req, res) =>
+		res
+			.writeHead(200, {
+				'content-type': 'text/html',
+				'content-security-policy': "script-src 'nonce-n0nce'",
+			})
+			.end(html),
+	);
+	await new Promise<void>((r) => target.listen(0, '127.0.0.1', r));
+	cleanup.push(() => {
+		target.closeAllConnections();
+		target.close();
+	});
+	const p = await startPunchlist(
+		root,
+		`http://127.0.0.1:${(target.address() as AddressInfo).port}`,
+	);
+	cleanup.push(() => p.kill());
+	await page.goto(p.url + '/');
+	await expect(
+		page.getByRole('region', { name: 'Review tray' }).getByText(`Item 1 of ${total}`),
+	).toBeVisible();
 });

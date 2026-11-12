@@ -103,6 +103,13 @@ beforeEach(async () => {
 		} else if (req.url === '/redirect' || req.url === '/redirect.html') {
 			const type = req.url.endsWith('.html') ? { 'content-type': 'text/html' } : {};
 			res.writeHead(302, { location: `${targetUrl}/login`, ...type }).end();
+		} else if (req.url === '/nonce.html') {
+			res
+				.writeHead(200, {
+					'content-type': 'text/html',
+					'content-security-policy': "script-src 'nonce-xyz'",
+				})
+				.end(HTML);
 		} else if (req.url === '/away')
 			res.writeHead(302, { location: 'http://elsewhere.example/' }).end();
 		else res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' }).end(HTML);
@@ -267,6 +274,14 @@ describe('server', () => {
 		}
 		const away = await fetch(`${app.url}/away`, { redirect: 'manual' });
 		expect(away.headers.get('location')).toBe('http://elsewhere.example/');
+	});
+
+	test('a target CSP nonce is copied to the tray script and the policy is forwarded unchanged', async () => {
+		const res = await fetch(`${app.url}/nonce.html`);
+		expect(res.headers.get('content-security-policy')).toBe("script-src 'nonce-xyz'");
+		expect(await res.text()).toContain(
+			'<script type="module" nonce="xyz" src="/__punchlist/tray.ts">',
+		);
 	});
 
 	test('a command upload or target response cut off mid-body leaves no unhandled rejection and the server up', async () => {
