@@ -188,6 +188,8 @@ export async function startServer(opts: {
 			return send(res, 403, { error: 'Host must be this review server on loopback' });
 		// Raw req.url on purpose: URL parsing would collapse "/__punchlist/../x" and slip past the name check.
 		const path = (req.url ?? '/').split('?')[0] ?? '/';
+		// CSP decodes %2F before path-matching, so the connect-src source added for the tray also admits these; never proxy them.
+		if (/^\/__punchlist%2f/i.test(path)) return send(res, 404, { error: 'not found' });
 		if (path.startsWith('/__punchlist/')) {
 			const name = path.slice('/__punchlist/'.length);
 			if (req.method === 'GET' && name === 'state') return send(res, 200, store.state());

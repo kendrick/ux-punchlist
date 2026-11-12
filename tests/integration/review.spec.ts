@@ -322,6 +322,8 @@ test('the tray works under default-src none, and the target stays blocked outsid
 		);
 	expect(await probe('/elsewhere')).toBe('blocked');
 	expect(await probe('/__punchlist')).toBe('blocked');
+	// Chrome and Firefox let this through CSP; the target, which answers 200 to every path, must never see it.
+	expect(await probe('/__punchlist%2Fstate')).not.toBe(200);
 });
 
 test('Comment mode picks an inline SVG inside a link instead of following the link', async ({
