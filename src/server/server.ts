@@ -16,11 +16,28 @@ const send = (res: ServerResponse, status: number, body: unknown) => {
 	res.writeHead(status, { 'content-type': 'application/json' }).end(JSON.stringify(body));
 };
 
-const readBody = async (req: IncomingMessage) => {
-	const chunks: Buffer[] = [];
-	for await (const chunk of req) chunks.push(Buffer.from(chunk));
-	return Buffer.concat(chunks).toString('utf8');
-};
+const MAX_COMMAND_BYTES = 1024 * 1024;
+
+class TooLarge extends Error {}
+
+// Listeners, not for-await: breaking out of for-await destroys the socket before a 413 can go out.
+const readBody = (req: IncomingMessage, limit = Infinity) =>
+	new Promise<string>((resolve, reject) => {
+		const chunks: Buffer[] = [];
+		let size = 0;
+		const onData = (chunk: Buffer) => {
+			size += chunk.length;
+			if (size <= limit) {
+				chunks.push(Buffer.from(chunk));
+				return;
+			}
+			req.off('data', onData).pause();
+			reject(new TooLarge());
+		};
+		req.on('data', onData);
+		req.on('end', () => resolve(Buffer.concat(chunks).toString('utf8')));
+		req.on('error', reject);
+	});
 
 const FIELDS: Record<string, string[]> = {
 	select: ['itemId'],
@@ -70,13 +87,21 @@ export async function startServer(opts: {
 		// Any other type is a "simple" cross-site POST with no preflight; JSON forces one, and with no CORS headers the browser blocks it.
 		if (req.headers['content-type']?.split(';')[0]?.trim().toLowerCase() !== 'application/json')
 			return send(res, 400, { error: 'content-type must be application/json' });
-		const text = await readBody(req);
+		let text: string;
+		try {
+			text = await readBody(req, MAX_COMMAND_BYTES);
+		} catch (e) {
+			if (!(e instanceof TooLarge)) throw e;
+			// Close the socket after replying so the rest of the upload is never read.
+			res.setHeader('connection', 'close');
+			return send(res, 413, { error: 'body is larger than 1 MiB' });
+		}
 		const job = queue.then(async () => {
 			let command = parseCommand(text);
 			if (command.type === 'comment') {
 				const page = URL.parse(command.pageUrl);
-				// Keeps headless Chromium off arbitrary URLs; Host, not a fixed origin, so localhost and 127.0.0.1 both work.
-				if (!page || page.host !== req.headers.host)
+				// Keeps headless Chromium off arbitrary URLs.
+				if (!page || !allowedHosts.has(page.host))
 					throw new CommandError('pageUrl must be a page on this review server');
 				const seq = store.state().lastSeq + 1;
 				const screenshot = `.review/screenshots/${seq}.png`;
@@ -125,7 +150,13 @@ export async function startServer(opts: {
 		req.pipe(upstream);
 	};
 
+	// Filled after listen, since port 0 binds a random port.
+	let allowedHosts = new Set<string>();
+
 	const server = http.createServer((req, res) => {
+		// A DNS-rebound page is same-origin with us, so the browser's CORS and preflight rules don't apply; only Host gives it away.
+		if (!allowedHosts.has(req.headers.host?.toLowerCase() ?? ''))
+			return send(res, 403, { error: 'Host must be this review server on loopback' });
 		// Raw req.url on purpose: URL parsing would collapse "/__punchlist/../x" and slip past the name check.
 		const path = (req.url ?? '/').split('?')[0] ?? '/';
 		if (path.startsWith('/__punchlist/')) {
@@ -141,6 +172,7 @@ export async function startServer(opts: {
 	await new Promise<void>((resolve) => server.listen(opts.port, '127.0.0.1', resolve));
 	const address = server.address();
 	const port = typeof address === 'object' && address ? address.port : opts.port;
+	allowedHosts = new Set([`127.0.0.1:${port}`, `localhost:${port}`, `[::1]:${port}`]);
 	return {
 		url: `http://127.0.0.1:${port}`,
 		warning: store.warning,

@@ -8,6 +8,8 @@ import {
 	readFileSync,
 	writeFileSync,
 } from 'node:fs';
+import { spawn } from 'node:child_process';
+import { once } from 'node:events';
 import http, { type IncomingHttpHeaders } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
@@ -60,6 +62,18 @@ const rawPost = (body: string, headers: Record<string, string>) =>
 					res.on('end', () => resolve(res.statusCode ?? 0));
 				},
 			)
+			.on('error', reject)
+			.end(body);
+	});
+
+const rawRequest = (method: string, path: string, headers: Record<string, string>, body = '') =>
+	new Promise<number>((resolve, reject) => {
+		const { hostname, port } = new URL(app.url);
+		http
+			.request({ host: hostname, port, path, method, headers }, (res) => {
+				res.resume();
+				res.on('end', () => resolve(res.statusCode ?? 0));
+			})
 			.on('error', reject)
 			.end(body);
 	});
@@ -224,6 +238,117 @@ describe('server', () => {
 		expect(await rawPost(body, headers)).toBe(200);
 		expect(readEvents().at(-1)).toMatchObject({ type: 'comment-pinned', pageUrl: `${targetUrl}/` });
 	});
+});
+
+describe('host allowlist and body cap', () => {
+	const approve = JSON.stringify({ type: 'approve', itemId: 'home-hero' });
+	const json = { 'content-type': 'application/json' };
+
+	test('a request whose Host is not loopback on our port gets 403 on every route and appends nothing', async () => {
+		const port = new URL(app.url).port;
+		const before = readFileSync(logPath());
+		const evil = { host: `evil.example:${port}` };
+		expect(await rawRequest('GET', '/__punchlist/state', evil)).toBe(403);
+		expect(await rawRequest('POST', '/__punchlist/commands', { ...evil, ...json }, approve)).toBe(
+			403,
+		);
+		expect(await rawRequest('GET', '/pricing.html', evil)).toBe(403);
+		// Right name, wrong port: a rebound page on another port still isn't us.
+		expect(await rawRequest('GET', '/__punchlist/state', { host: 'localhost:1' })).toBe(403);
+		expect(seen).toHaveLength(0);
+		expect(readFileSync(logPath()).equals(before)).toBe(true);
+
+		for (const host of [`localhost:${port}`, `127.0.0.1:${port}`, `[::1]:${port}`])
+			expect(await rawRequest('GET', '/__punchlist/state', { host })).toBe(200);
+		expect(await rawRequest('GET', '/pricing.html', { host: `localhost:${port}` })).toBe(200);
+	});
+
+	test('a comment whose pageUrl names the attacker host is refused even when Host matches it', async () => {
+		const port = new URL(app.url).port;
+		const before = readFileSync(logPath());
+		const body = JSON.stringify({
+			type: 'comment',
+			itemId: 'home-hero',
+			selector: 'h1',
+			text: 'forged',
+			screenshot: '',
+			pageUrl: `http://evil.example:${port}/`,
+		});
+		expect(await rawPost(body, { ...json, host: `evil.example:${port}` })).toBe(403);
+		expect(await rawPost(body, { ...json, host: `127.0.0.1:${port}` })).toBe(400);
+		expect(captured).toEqual([]);
+		expect(readFileSync(logPath()).equals(before)).toBe(true);
+	});
+
+	test('a command body over 1 MiB gets 413 and appends nothing', async () => {
+		const before = readFileSync(logPath());
+		const huge = JSON.stringify({
+			type: 'approve',
+			itemId: 'home-hero',
+			pad: 'x'.repeat(1024 * 1024),
+		});
+		const res = await post(JSON.parse(huge));
+		expect(res.status).toBe(413);
+		expect(readFileSync(logPath()).equals(before)).toBe(true);
+		// Just under the cap still goes through.
+		expect(
+			(await post({ type: 'approve', itemId: 'home-hero', pad: 'x'.repeat(1000) })).status,
+		).toBe(200);
+	});
+});
+
+describe('cli', () => {
+	test(
+		'SIGTERM after a screenshot capture stops the CLI with exit 0',
+		{ timeout: 60_000 },
+		async () => {
+			const cliRoot = mkdtempSync(join(tmpdir(), 'punchlist-cli-'));
+			mkdirSync(join(cliRoot, '.review'));
+			copyFileSync(
+				join(import.meta.dirname, '../../fixtures/manifest.yaml'),
+				join(cliRoot, '.review', 'manifest.yaml'),
+			);
+			const cli = spawn(process.execPath, [
+				join(import.meta.dirname, '../../src/cli.ts'),
+				'start',
+				'--target',
+				targetUrl,
+				'--root',
+				cliRoot,
+			]);
+			try {
+				let out = '';
+				const url = await new Promise<string>((resolve, reject) => {
+					cli.stdout.on('data', (c) => {
+						out += c;
+						const m = /listening on (\S+)/.exec(out);
+						if (m?.[1]) resolve(m[1]);
+					});
+					cli.on('exit', () => reject(new Error(`cli exited early: ${out}`)));
+				});
+				// A comment launches Chromium, and that's what used to swallow SIGTERM.
+				const res = await fetch(`${url}/__punchlist/commands`, {
+					method: 'POST',
+					headers: { 'content-type': 'application/json' },
+					body: JSON.stringify({
+						type: 'comment',
+						itemId: 'home-hero',
+						selector: 'h1',
+						text: 'x',
+						screenshot: '',
+						pageUrl: `${url}/`,
+					}),
+				});
+				expect(res.status).toBe(200);
+				const exited = once(cli, 'exit');
+				cli.kill('SIGTERM');
+				const timeout = new Promise((r) => setTimeout(() => r('timeout'), 5000));
+				expect(await Promise.race([exited, timeout])).toEqual([0, null]);
+			} finally {
+				cli.kill('SIGKILL');
+			}
+		},
+	);
 });
 
 describe('openSession', () => {

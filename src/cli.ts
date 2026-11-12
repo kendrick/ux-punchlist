@@ -28,10 +28,13 @@ try {
 	});
 	console.log(`punchlist: listening on ${server.url}`);
 	if (server.warning) console.log(`punchlist: warning: ${server.warning}`);
-	process.once('SIGINT', async () => {
+	const stop = async () => {
 		await Promise.all([server.close(), screenshots.close()]);
 		process.exit(0);
-	});
+	};
+	process.once('SIGINT', stop);
+	// Playwright adds its own SIGTERM listener once Chromium launches, which stops Node's default exit.
+	process.once('SIGTERM', stop);
 } catch (e) {
 	if (!(e instanceof LogError || e instanceof ManifestError)) throw e;
 	console.error(`punchlist: ${e.message}`);
