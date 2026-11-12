@@ -100,14 +100,14 @@ export async function startServer(opts: {
 			let command = parseCommand(text);
 			if (command.type === 'comment') {
 				const page = URL.parse(command.pageUrl);
-				// Keeps headless Chromium off arbitrary URLs.
+				// Without this, any pageUrl would send headless Chromium to an arbitrary URL.
 				if (!page || !allowedHosts.has(page.host))
 					throw new CommandError('pageUrl must be a page on this review server');
 				const seq = store.state().lastSeq + 1;
 				const screenshot = `.review/screenshots/${seq}.png`;
 				// Log and capture the app's own URL: the proxy port dies on restart, and the proxied page has the tray over it.
 				const pageUrl = new URL(page.pathname + page.search + page.hash, target).href;
-				// Never trust the client's screenshot value.
+				// The server picks the screenshot path, so a client can't aim the capture outside `.review/screenshots/`.
 				command = { ...command, screenshot, pageUrl };
 				decide(store.state(), command, ''); // reject a bad comment before paying for a capture
 				mkdirSync(join(opts.root, '.review', 'screenshots'), { recursive: true });

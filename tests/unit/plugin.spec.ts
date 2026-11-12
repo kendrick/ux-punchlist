@@ -7,8 +7,7 @@ import { describe, expect, it } from 'vitest';
 const root = fileURLToPath(new URL('../../', import.meta.url));
 const read = (rel: string) => readFileSync(root + rel, 'utf8');
 
-// The AGENTS.md text as it stood before the Build and test section was added.
-// The new section must only be appended after it.
+// AGENTS.md's other sections, which must stay unchanged and ahead of `## Build and test`.
 const ORIGINAL_AGENTS = `## Agent skills
 
 ### Issue tracker

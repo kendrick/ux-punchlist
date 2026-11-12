@@ -16,7 +16,7 @@ const comment: Command = {
 	pageUrl: 'http://localhost/b.html',
 };
 
-// Applies commands one at a time, the way the server will.
+// Applies commands one at a time, the way the server does.
 function run(...commands: Command[]): ReviewEvent[] {
 	const events: ReviewEvent[] = [];
 	for (const c of commands) events.push(...decide(reduce(events), c, NOW));

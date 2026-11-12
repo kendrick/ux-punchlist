@@ -50,7 +50,7 @@ const rawGet = (path: string) =>
 			.on('error', reject);
 	});
 
-// Raw http.request so the test can set Host and content-type, which fetch would fix for us.
+// Raw http.request: fetch won't let a test set Host, and it adds its own content-type.
 const rawPost = (body: string, headers: Record<string, string>) =>
 	new Promise<number>((resolve, reject) => {
 		const { hostname, port } = new URL(app.url);

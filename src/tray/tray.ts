@@ -95,7 +95,7 @@ function render() {
 	const { items, position, approved, comments } = state;
 	const item = items[position]!;
 	const count = comments.filter((c) => c.itemId === item.id).length;
-	// A restart restores the position but not the page; never auto-navigate, but block comments filed under the wrong item.
+	// A restart restores the position but not the page. Auto-navigating would yank reviewers off pages they followed a link to, so Comment stays disabled until the reviewer is on the item's page.
 	const here = item.url === location.pathname + location.search;
 	const go = async (to: number) => {
 		const target = items[to]!;
@@ -135,7 +135,7 @@ function render() {
 				itemId: item.id,
 				selector: cssPath(target),
 				text: text.value,
-				// Server replaces this with the captured screenshot path.
+				// `Command` requires the field; the server overwrites it with its own capture path.
 				screenshot: '',
 				pageUrl: location.href,
 			});
