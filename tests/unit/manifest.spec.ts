@@ -43,6 +43,10 @@ describe('parseManifest', () => {
 		'/\\',
 		'//[',
 		'//a:b@',
+		'//review.invalid/away',
+		'/\\review.invalid/away',
+		'/\t/review.invalid/away',
+		'/\n/review.invalid/away',
 	])('rejects a url %j that resolves off the review origin', (url) =>
 		bad(`items:\n  - id: a\n    title: A\n    url: ${JSON.stringify(url)}`, 'items[0].url: '),
 	);
