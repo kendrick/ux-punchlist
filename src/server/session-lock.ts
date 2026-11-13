@@ -77,9 +77,17 @@ function takeOver(path: string, retried = false): void {
 	}
 }
 
+const GITIGNORE = '# punchlist runtime files\n.gitignore\nsession.lock\nsession.lock.*\n';
+
 /** Takes `<dir>/session.lock`; the returned release only removes a lock that is still ours. */
 export function lockSession(dir: string): () => void {
 	const path = join(dir, 'session.lock');
+	// A SIGKILL leaves the lock files behind; ignoring them here keeps them out of `git status` without touching the project's own .gitignore. 'wx' leaves a user's existing file alone.
+	try {
+		writeFileSync(join(dir, '.gitignore'), GITIGNORE, { flag: 'wx' });
+	} catch (err) {
+		if (code(err) !== 'EEXIST') throw err;
+	}
 	if (!tryCreate(path)) {
 		const holder = liveHolder(path);
 		if (holder !== null) throw new SessionLockedError(holder);

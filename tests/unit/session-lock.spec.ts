@@ -1,6 +1,13 @@
 import { spawnSync } from 'node:child_process';
 import * as fs from 'node:fs';
-import { existsSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
+import {
+	existsSync,
+	mkdirSync,
+	mkdtempSync,
+	readdirSync,
+	readFileSync,
+	writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, test, vi } from 'vitest';
@@ -90,9 +97,9 @@ describe('lockSession', () => {
 		});
 		const release = lockSession(dir);
 		expect(seen).toEqual([{ existed: false, body: String(process.pid) }]);
-		expect(readdirSync(dir)).toEqual(['session.lock']);
+		expect(readdirSync(dir)).toEqual(['.gitignore', 'session.lock']);
 		release();
-		expect(readdirSync(dir)).toEqual([]);
+		expect(readdirSync(dir)).toEqual(['.gitignore']);
 	});
 
 	test('losing a takeover race to a holder that is already gone names no pid', () => {
@@ -153,7 +160,7 @@ describe('lockSession', () => {
 		expect(hooked).toBe(true);
 		expect(results.toSorted()).toEqual(['locked', 'refused']);
 		expect(readFileSync(path, 'utf8')).toBe(String(process.pid));
-		expect(readdirSync(dir)).toEqual(['session.lock']);
+		expect(readdirSync(dir)).toEqual(['.gitignore', 'session.lock']);
 	});
 
 	test('a takeover file left by a dead pid is cleared and the stale lock taken over', () => {
@@ -163,7 +170,7 @@ describe('lockSession', () => {
 		writeFileSync(join(dir, 'session.lock.takeover'), String(dead));
 		lockSession(dir);
 		expect(readFileSync(join(dir, 'session.lock'), 'utf8')).toBe(String(process.pid));
-		expect(readdirSync(dir)).toEqual(['session.lock']);
+		expect(readdirSync(dir)).toEqual(['.gitignore', 'session.lock']);
 	});
 
 	test('a takeover file a live process holds refuses, and leaves both files alone', () => {
@@ -184,5 +191,62 @@ describe('lockSession', () => {
 		const b = tmp();
 		lockSession(a);
 		expect(() => lockSession(b)).not.toThrow();
+	});
+});
+
+const git = (cwd: string, ...args: string[]) =>
+	spawnSync('git', args, { cwd, encoding: 'utf8' }).stdout;
+const repo = () => {
+	const root = tmp();
+	git(root, 'init');
+	const review = join(root, '.review');
+	mkdirSync(review);
+	return { root, review };
+};
+const status = (root: string) => git(root, 'status', '--porcelain', '--untracked-files=all');
+
+describe('lockSession in a git repo', () => {
+	test("a lock left by a crash doesn't show in git status", () => {
+		const { root, review } = repo();
+		lockSession(review); // never released: what a SIGKILL leaves behind
+		writeFileSync(join(review, 'session.lock.takeover'), '1');
+		writeFileSync(join(review, 'session.lock.123.tmp'), '1');
+		const out = status(root);
+		for (const name of [
+			'session.lock',
+			'session.lock.takeover',
+			'session.lock.123.tmp',
+			'.gitignore',
+		])
+			expect(out).not.toContain(name);
+	});
+
+	test('the review record still shows in git status', () => {
+		const { root, review } = repo();
+		lockSession(review);
+		writeFileSync(join(review, 'events.jsonl'), '');
+		writeFileSync(join(review, 'manifest.yaml'), '');
+		mkdirSync(join(review, 'screenshots'));
+		writeFileSync(join(review, 'screenshots', 'a.png'), '');
+		const out = status(root);
+		for (const f of ['events.jsonl', 'manifest.yaml', 'screenshots/a.png'])
+			expect(out).toContain(`.review/${f}`);
+	});
+
+	test('an existing .review/.gitignore is left alone', () => {
+		const { review } = repo();
+		writeFileSync(join(review, '.gitignore'), 'keep-me\n');
+		lockSession(review);
+		expect(readFileSync(join(review, '.gitignore'), 'utf8')).toBe('keep-me\n');
+	});
+
+	test("the project's .gitignore is never written", () => {
+		const a = repo();
+		writeFileSync(join(a.root, '.gitignore'), 'node_modules/\n');
+		lockSession(a.review);
+		expect(readFileSync(join(a.root, '.gitignore'), 'utf8')).toBe('node_modules/\n');
+		const b = repo();
+		lockSession(b.review);
+		expect(existsSync(join(b.root, '.gitignore'))).toBe(false);
 	});
 });
