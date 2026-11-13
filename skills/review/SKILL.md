@@ -22,7 +22,11 @@ This skill starts a review session on a running app. The reviewer steps through 
    node "${CLAUDE_PLUGIN_ROOT}/src/plan/cli.ts" --app <app dir>
    ```
 
-   Add `--base <ref>` when the branch is not based on `main`. Add `--root <dir>` when the project is not the current directory. Show the user the manifest and let them edit it before step 3. If Plan reports `no reviewable changes`, stop and say so. If it exits with a line starting with `punchlist: plan:`, show that message and stop.
+   `--app` is relative to `--root`. Add `--base <ref>` when the branch is not based on `main`. Add `--root <dir>` when the project is not the current directory. Then act on the result:
+
+   - Exit 0 with `wrote N items`: show the user the manifest, let them edit it, then go to step 3.
+   - Exit 0 with `no reviewable changes`: say so and stop.
+   - Non-zero exit: show Plan's `punchlist: plan:` error line and stop.
 
 3. Make sure the app under review is running. Then start the review server in the background:
 

@@ -1,6 +1,6 @@
 import { execFileSync } from 'node:child_process';
 import { mkdirSync, statSync, writeFileSync } from 'node:fs';
-import { join, relative, resolve } from 'node:path';
+import { isAbsolute, join, relative, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 import { serializeManifest } from '../core/manifest.ts';
 import { planItems } from './plan.ts';
@@ -22,6 +22,12 @@ const fail = (reason: string): never => {
 const rootStat = statSync(values.root, { throwIfNoEntry: false });
 if (!rootStat) fail(`--root ${values.root} does not exist`);
 if (!rootStat?.isDirectory()) fail(`--root ${values.root} is not a directory`);
+// A mistyped --app would otherwise filter every path out and look like "no reviewable changes".
+const appDir = relative(values.root, resolve(values.root, values.app)) || '.';
+if (appDir === '..' || appDir.startsWith('../') || isAbsolute(appDir))
+	fail(`--app ${values.app} is outside --root ${values.root}`);
+if (!statSync(resolve(values.root, appDir), { throwIfNoEntry: false })?.isDirectory())
+	fail(`--app ${values.app} is not a directory under --root ${values.root}`);
 const git = (...args: string[]) =>
 	execFileSync('git', args, {
 		cwd: values.root,
@@ -40,10 +46,7 @@ try {
 		'--diff-filter=d',
 		`${values.base}...HEAD`,
 	);
-	const items = planItems(
-		diff.split('\0').filter(Boolean),
-		relative(values.root, resolve(values.root, values.app)) || '.',
-	);
+	const items = planItems(diff.split('\0').filter(Boolean), appDir);
 	const dir = join(values.root, '.review');
 	// A plain file here makes mkdirSync throw EEXIST, which the catch would misreport as an existing manifest.
 	if (statSync(dir, { throwIfNoEntry: false })?.isDirectory() === false)

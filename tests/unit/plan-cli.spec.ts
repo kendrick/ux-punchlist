@@ -111,6 +111,23 @@ describe('plan cli', () => {
 		expect(r.stdout).toContain('wrote 2 items');
 	});
 
+	it('fails in one line on an --app that is missing or outside --root', { timeout: 60_000 }, () => {
+		changeTwoPages();
+		for (const app of ['ap', '../outside']) {
+			const r = plan('--app', app);
+			expect(r.status).toBe(1);
+			expect(r.stderr.trim().split('\n')).toHaveLength(1);
+			expect(r.stderr.startsWith('punchlist: plan: --app')).toBe(true);
+			expect(existsSync(manifestPath())).toBe(false);
+		}
+	});
+
+	it('accepts --app . and the default', { timeout: 60_000 }, () => {
+		changeTwoPages();
+		const r = spawnSync(process.execPath, [cli, '--app', '.', '--root', tmp], { encoding: 'utf8' });
+		expect(r.status).toBe(0);
+	});
+
 	it('refuses to overwrite', { timeout: 60_000 }, () => {
 		changeTwoPages();
 		expect(plan().status).toBe(0);
