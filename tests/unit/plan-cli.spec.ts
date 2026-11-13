@@ -147,4 +147,33 @@ describe('plan cli', () => {
 		expect(r.status).toBe(1);
 		expect(r.stderr).toBe(`punchlist: plan: --root ${dir} does not exist\n`);
 	});
+
+	it('fails in one line on a root that is a regular file', { timeout: 60_000 }, () => {
+		const file = join(tmp, 'app', 'index.html');
+		const r = spawnSync(process.execPath, [cli, '--root', file], { encoding: 'utf8' });
+		expect(r.status).toBe(1);
+		expect(r.stderr).toBe(`punchlist: plan: --root ${file} is not a directory\n`);
+	});
+
+	it(
+		'names a .review that is a file instead of claiming a manifest exists',
+		{ timeout: 60_000 },
+		() => {
+			changeTwoPages();
+			writeFileSync(join(tmp, '.review'), '');
+			const r = plan();
+			expect(r.status).toBe(1);
+			expect(r.stderr).toBe('punchlist: plan: .review exists and is not a directory\n');
+		},
+	);
+
+	it('plans a changed page with a non-ASCII name', { timeout: 60_000 }, () => {
+		writeFileSync(join(tmp, 'app', 'ü.html'), '<p>ü</p>');
+		commit('add umlaut page');
+		const r = plan();
+		expect(r.status).toBe(0);
+		expect(r.stdout).toContain('wrote 1 item to');
+		const [item] = parseManifest(readFileSync(manifestPath(), 'utf8'));
+		expect(item?.url).toBe('/%C3%BC.html');
+	});
 });

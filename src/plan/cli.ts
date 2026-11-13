@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, statSync, writeFileSync } from 'node:fs';
 import { join, relative, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 import { serializeManifest } from '../core/manifest.ts';
@@ -18,8 +18,10 @@ const fail = (reason: string): never => {
 	process.exit(1);
 };
 
-// Without these, a missing cwd surfaces as "spawnSync git ENOENT" and a non-git dir as git diff's usage dump.
-if (!existsSync(values.root)) fail(`--root ${values.root} does not exist`);
+// Without these, a bad cwd surfaces as "spawnSync git ENOENT/ENOTDIR" and a non-git dir as git diff's usage dump.
+const rootStat = statSync(values.root, { throwIfNoEntry: false });
+if (!rootStat) fail(`--root ${values.root} does not exist`);
+if (!rootStat?.isDirectory()) fail(`--root ${values.root} is not a directory`);
 const git = (...args: string[]) =>
 	execFileSync('git', args, {
 		cwd: values.root,
@@ -29,12 +31,23 @@ const git = (...args: string[]) =>
 
 try {
 	git('rev-parse', '--git-dir');
-	const diff = git('diff', '--relative', '--name-only', '--diff-filter=d', `${values.base}...HEAD`);
+	// -z: without it git quotes and octal-escapes non-ASCII paths, so "ü.html" fails the .html check.
+	const diff = git(
+		'diff',
+		'-z',
+		'--relative',
+		'--name-only',
+		'--diff-filter=d',
+		`${values.base}...HEAD`,
+	);
 	const items = planItems(
-		diff.split('\n').filter(Boolean),
+		diff.split('\0').filter(Boolean),
 		relative(values.root, resolve(values.root, values.app)) || '.',
 	);
 	const dir = join(values.root, '.review');
+	// A plain file here makes mkdirSync throw EEXIST, which the catch would misreport as an existing manifest.
+	if (statSync(dir, { throwIfNoEntry: false })?.isDirectory() === false)
+		fail('.review exists and is not a directory');
 	mkdirSync(dir, { recursive: true });
 	// Flag wx: never clobber a manifest the owner may have hand-edited.
 	writeFileSync(join(dir, 'manifest.yaml'), serializeManifest(items), { flag: 'wx' });

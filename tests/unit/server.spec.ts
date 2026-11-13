@@ -597,6 +597,17 @@ describe('openSession', () => {
 		session.close();
 	});
 
+	test('openSession on an existing log with an emptied manifest resumes with a warning', async () => {
+		await app.close();
+		writeFileSync(join(root, '.review', 'manifest.yaml'), 'items: []\n');
+		const session = openSession(root, NOW);
+		expect(session.state().items.map((i) => i.id)).toEqual(['home-hero', 'pricing-table']);
+		expect(session.warning).toBe(
+			"manifest.yaml differs from the running session; keeping the session's items",
+		);
+		session.close();
+	});
+
 	test('openSession on a log with a torn last line throws LogError', async () => {
 		await app.close();
 		appendFileSync(logPath(), '{"seq":2,"at":"x","type":"item-sel');
