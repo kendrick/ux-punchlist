@@ -212,8 +212,13 @@ export async function startServer(opts: {
 		warning: store.warning,
 		close: () =>
 			new Promise<void>((resolve, reject) => {
+				if (!server.listening) return resolve();
 				server.closeAllConnections();
-				server.close((e) => (e ? reject(e) : resolve()));
+				server.close((e) => {
+					if (e) return reject(e);
+					store.close();
+					resolve();
+				});
 			}),
 	};
 }

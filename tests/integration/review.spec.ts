@@ -113,7 +113,7 @@ test('killing and restarting the plugin restores position, comments and approval
 	await expect(page.getByText('Approved', { exact: true })).toBeVisible();
 	snap();
 
-	punchlist.kill();
+	await punchlist.kill();
 	const restarted = await start();
 	await page.goto(restarted.url + '/');
 	await expect(page.getByText('Item 2 of 2')).toBeVisible();
