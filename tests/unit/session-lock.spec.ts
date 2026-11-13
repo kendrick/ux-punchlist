@@ -6,13 +6,14 @@ import { join } from 'node:path';
 import { describe, expect, test, vi } from 'vitest';
 import { lockSession, SessionLockedError } from '../../src/server/session-lock.ts';
 
-// Pass-through spy, so a test can look at the lock's source file at the moment it is linked into place.
+// Pass-through spies, so a test can look at or interleave the lock's file steps as they happen.
 vi.mock('node:fs', async (importOriginal) => {
 	const real = await importOriginal<typeof import('node:fs')>();
-	return { ...real, linkSync: vi.fn(real.linkSync) };
+	return { ...real, linkSync: vi.fn(real.linkSync), unlinkSync: vi.fn(real.unlinkSync) };
 });
 
-const { linkSync: realLinkSync } = await vi.importActual<typeof import('node:fs')>('node:fs');
+const { linkSync: realLinkSync, unlinkSync: realUnlinkSync } =
+	await vi.importActual<typeof import('node:fs')>('node:fs');
 const tmp = () => mkdtempSync(join(tmpdir(), 'punchlist-lock-'));
 
 describe('lockSession', () => {
@@ -91,9 +92,10 @@ describe('lockSession', () => {
 		const dead = spawnSync(process.execPath, ['-e', '']).pid;
 		writeFileSync(path, String(dead));
 		vi.mocked(fs.linkSync)
-			.mockImplementationOnce(realLinkSync)
+			.mockImplementationOnce(realLinkSync) // session.lock: EEXIST
+			.mockImplementationOnce(realLinkSync) // session.lock.takeover
 			.mockImplementationOnce(() => {
-				// Another start takes the stale lock between our unlink and our link, then dies.
+				// A fresh start takes the stale lock between our unlink and our link, then dies.
 				writeFileSync(path, String(dead));
 				throw Object.assign(new Error('EEXIST'), { code: 'EEXIST' });
 			});
@@ -108,6 +110,64 @@ describe('lockSession', () => {
 			pid: undefined,
 			message: 'another punchlist server is already running on this root',
 		});
+	});
+
+	test('two starts that both see the same dead holder: at most one ends up holding the lock', () => {
+		const dir = tmp();
+		const path = join(dir, 'session.lock');
+		const dead = spawnSync(process.execPath, ['-e', '']).pid;
+		writeFileSync(path, String(dead));
+		const results: string[] = [];
+		const attempt = () => {
+			try {
+				lockSession(dir);
+				results.push('locked');
+			} catch (e) {
+				if (!(e instanceof SessionLockedError)) throw e;
+				results.push('refused');
+			}
+		};
+		let hooked = false;
+		vi.mocked(fs.unlinkSync).mockImplementation((p) => {
+			// B has judged the lock stale and is about to remove it; A, which saw the same dead pid, runs to completion first.
+			if (p === path && !hooked) {
+				hooked = true;
+				attempt();
+			}
+			realUnlinkSync(p);
+		});
+		try {
+			attempt();
+		} finally {
+			vi.mocked(fs.unlinkSync).mockImplementation(realUnlinkSync);
+		}
+		expect(hooked).toBe(true);
+		expect(results.toSorted()).toEqual(['locked', 'refused']);
+		expect(readFileSync(path, 'utf8')).toBe(String(process.pid));
+		expect(readdirSync(dir)).toEqual(['session.lock']);
+	});
+
+	test('a takeover file left by a dead pid is cleared and the stale lock taken over', () => {
+		const dir = tmp();
+		const dead = spawnSync(process.execPath, ['-e', '']).pid;
+		writeFileSync(join(dir, 'session.lock'), String(dead));
+		writeFileSync(join(dir, 'session.lock.takeover'), String(dead));
+		lockSession(dir);
+		expect(readFileSync(join(dir, 'session.lock'), 'utf8')).toBe(String(process.pid));
+		expect(readdirSync(dir)).toEqual(['session.lock']);
+	});
+
+	test('a takeover file a live process holds refuses, and leaves both files alone', () => {
+		const dir = tmp();
+		const dead = spawnSync(process.execPath, ['-e', '']).pid;
+		writeFileSync(join(dir, 'session.lock'), String(dead));
+		writeFileSync(join(dir, 'session.lock.takeover'), String(process.ppid));
+		// No pid in the message: the session.lock holder is dead, and the takeover holder isn't the server.
+		expect(() => lockSession(dir)).toThrow(
+			'another punchlist server is already running on this root',
+		);
+		expect(readFileSync(join(dir, 'session.lock'), 'utf8')).toBe(String(dead));
+		expect(readFileSync(join(dir, 'session.lock.takeover'), 'utf8')).toBe(String(process.ppid));
 	});
 
 	test('two dirs lock side by side', () => {

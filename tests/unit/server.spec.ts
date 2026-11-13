@@ -366,6 +366,14 @@ describe('server', () => {
 			await second.close();
 		}
 	});
+
+	test('a startServer that rejects on a bad target leaves the root unlocked for the next one', async () => {
+		await app.close();
+		const opts = { root, port: 0, capture: async () => {} };
+		await expect(startServer({ ...opts, target: 'not a url' })).rejects.toThrow(TypeError);
+		app = await startServer({ ...opts, target: targetUrl });
+		expect((await fetch(`${app.url}/__punchlist/state`)).status).toBe(200);
+	});
 });
 
 describe('host allowlist and body cap', () => {

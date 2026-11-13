@@ -72,13 +72,20 @@ function serveTray(name: string, res: ServerResponse) {
 	res.writeHead(200, { 'content-type': 'text/javascript' }).end(js);
 }
 
-export async function startServer(opts: {
-	root: string;
-	target: string;
-	port: number;
-	capture: Screenshotter;
-}) {
+type ServerOptions = { root: string; target: string; port: number; capture: Screenshotter };
+
+export async function startServer(opts: ServerOptions) {
 	const store = openSession(opts.root, () => new Date().toISOString());
+	try {
+		return await serve(opts, store);
+	} catch (e) {
+		// No handle reaches the caller, so nothing else would release the lock this live process holds.
+		store.close();
+		throw e;
+	}
+}
+
+async function serve(opts: ServerOptions, store: ReturnType<typeof openSession>) {
 	const target = new URL(opts.target);
 	const client = target.protocol === 'https:' ? https : http;
 	// Assign onto target rather than resolve: a "//host/x" or absolute path would resolve to another origin.
