@@ -403,3 +403,24 @@ test('Pin comment refuses a pick that was removed from the page', async ({ page 
 	await expect(page.getByText('That element is gone')).toBeVisible();
 	expect(readEvents(root).filter((e) => e.type === 'comment-pinned')).toEqual([]);
 });
+
+test('a pin that lands after a new pick leaves the new pick and draft alone', async ({ page }) => {
+	const { punchlist } = await setup(onePlan);
+	let release!: () => void;
+	const held = new Promise<void>((r) => (release = r));
+	await page.route('**/__punchlist/commands', async (route) => {
+		if (route.request().postData()?.includes('"comment"')) await held;
+		await route.continue();
+	});
+	await pickTable(page, punchlist.url);
+	await page.getByRole('button', { name: 'Pin comment' }).click();
+	await page.getByRole('button', { name: 'Comment', exact: true }).click();
+	await page.locator('h1').click();
+	const box = page.getByRole('textbox', { name: 'Comment' });
+	await box.fill('Heading');
+	const pinned = page.waitForResponse('**/__punchlist/commands');
+	release();
+	await pinned;
+	await expect(page.getByText('1 comment')).toBeVisible();
+	await expect(box).toHaveValue('Heading');
+});
