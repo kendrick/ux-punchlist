@@ -1,5 +1,8 @@
 // @vitest-environment node
-import { readFileSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
+import { copyFileSync, existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parse as parseYaml } from 'yaml';
 import { describe, expect, it } from 'vitest';
@@ -66,8 +69,42 @@ describe('plugin packaging', () => {
 		expect(text).toContain('node "${CLAUDE_PLUGIN_ROOT}/src/cli.ts" start --target');
 		expect(text).toContain('.review/manifest.yaml');
 		expect(text).toContain('src/plan/cli.ts');
-		expect(text).toContain('npm install --omit=dev --prefix "${CLAUDE_PLUGIN_ROOT}"');
+		expect(text).toContain('pnpm install --prod --frozen-lockfile --dir "${CLAUDE_PLUGIN_ROOT}"');
+		expect(text).toContain('pnpm --dir "${CLAUDE_PLUGIN_ROOT}" exec playwright install chromium');
+		expect(text).not.toMatch(/\bnpm install\b|\bnpx\b/);
 	});
+
+	it(
+		'the pnpm install line in a clean plugin root creates no package-lock.json',
+		{ timeout: 120_000 },
+		() => {
+			const line = read('skills/review/SKILL.md')
+				.split('\n')
+				.map((l) => l.trim())
+				.find((l) => l.startsWith('pnpm install'));
+			expect(line).toBeDefined();
+
+			const dir = mkdtempSync(join(tmpdir(), 'plugin-root-'));
+			try {
+				for (const f of ['package.json', 'pnpm-lock.yaml', 'pnpm-workspace.yaml']) {
+					copyFileSync(root + f, join(dir, f));
+				}
+				// cwd stays at the repo root: the line must work via --dir alone.
+				const result = spawnSync('sh', ['-c', line!], {
+					cwd: root,
+					env: { ...process.env, CLAUDE_PLUGIN_ROOT: dir },
+					encoding: 'utf8',
+				});
+				expect(result.status, result.stdout + result.stderr).toBe(0);
+				expect(existsSync(join(dir, 'package-lock.json'))).toBe(false);
+				expect(existsSync(join(dir, 'node_modules/yaml'))).toBe(true);
+				expect(existsSync(join(dir, 'node_modules/playwright'))).toBe(true);
+				expect(existsSync(join(dir, 'node_modules/vitest'))).toBe(false);
+			} finally {
+				rmSync(dir, { recursive: true, force: true });
+			}
+		},
+	);
 
 	it('LICENSE is the MIT text for Kendrick Arnett', () => {
 		const text = read('LICENSE');

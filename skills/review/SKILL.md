@@ -9,11 +9,11 @@ This skill starts a review session on a running app. The reviewer steps through 
 
 ## Steps
 
-1. Install the plugin's runtime dependencies once. Run this only when `${CLAUDE_PLUGIN_ROOT}/node_modules` is missing:
+1. Install the plugin's runtime dependencies once. Run this only when `${CLAUDE_PLUGIN_ROOT}/node_modules` is missing. If `pnpm` isn't on `PATH`, tell the user to install pnpm and stop.
 
    ```sh
-   npm install --omit=dev --prefix "${CLAUDE_PLUGIN_ROOT}"
-   npx --prefix "${CLAUDE_PLUGIN_ROOT}" playwright install chromium
+   pnpm install --prod --frozen-lockfile --dir "${CLAUDE_PLUGIN_ROOT}"
+   pnpm --dir "${CLAUDE_PLUGIN_ROOT}" exec playwright install chromium
    ```
 
 2. Check that `.review/manifest.yaml` exists in the project. If it does not, run Plan to write one from the branch diff:
