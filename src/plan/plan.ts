@@ -13,14 +13,14 @@ const WHOLE_LETTERS: Record<string, string> = {
 	þ: 'th',
 };
 
-// shortcut: names with no Latin transliteration fall back to home; upgrade if non-Latin page names show up in real projects.
+// shortcut: names with no Latin transliteration all become `home`, so several such pages collide with each other and with index.html (suffixed home-2, home-3, ...); upgrade if non-Latin page names show up in real projects.
 const idFor = (path: string): string =>
 	path
 		.replace(/\.html$/, '')
 		.toLowerCase()
 		.normalize('NFKD')
 		.replace(/\p{M}+/gu, '')
-		.replace(/[ßæœøłđðþ]/g, (c) => WHOLE_LETTERS[c] ?? c)
+		.replace(/[^\p{ASCII}]/gu, (c) => WHOLE_LETTERS[c] ?? c)
 		.replace(/[^a-z0-9]+/g, '-')
 		.replace(/^-|-$/g, '') || 'home';
 

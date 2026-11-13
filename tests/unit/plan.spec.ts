@@ -66,6 +66,23 @@ describe('planItems', () => {
 		wellFormed(ids);
 	});
 
+	it('maps each letter NFKD leaves whole', () => {
+		const ids = idsOf([
+			'app/ß.html',
+			'app/æ.html',
+			'app/œ.html',
+			'app/ø.html',
+			'app/ł.html',
+			'app/đ.html',
+			'app/ð.html',
+			'app/þ.html',
+		]);
+		// ð and đ both give d, so one of them takes the -2 suffix.
+		expect(ids).toHaveLength(8);
+		expect(ids).toEqual(expect.arrayContaining(['ss', 'ae', 'oe', 'o', 'l', 'd', 'd-2', 'th']));
+		wellFormed(ids);
+	});
+
 	it('a name with no letters or digits still falls back', () => {
 		const ids = idsOf(['app/_.html']);
 		expect(ids).toEqual(['home']);
