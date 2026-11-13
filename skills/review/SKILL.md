@@ -16,7 +16,13 @@ This skill starts a review session on a running app. The reviewer steps through 
    npx --prefix "${CLAUDE_PLUGIN_ROOT}" playwright install chromium
    ```
 
-2. Check that `.review/manifest.yaml` exists in the project. If it does not, stop and ask the user to create it, using the shape under "Manifest shape" below.
+2. Check that `.review/manifest.yaml` exists in the project. If it does not, run Plan to write one from the branch diff:
+
+   ```sh
+   node "${CLAUDE_PLUGIN_ROOT}/src/plan/cli.ts" --app <app dir>
+   ```
+
+   Add `--base <ref>` when the branch is not based on `main`. Add `--root <dir>` when the project is not the current directory. Show the user the manifest and let them edit it before step 3. If Plan reports `no reviewable changes`, stop and say so. If it exits with a line starting with `punchlist: plan:`, show that message and stop.
 
 3. Make sure the app under review is running. Then start the review server in the background:
 
@@ -40,7 +46,7 @@ items:
     question: Does the hero say what the product does?
 ```
 
-`items` is a non-empty list. Each `id` is unique and uses lowercase letters, digits and hyphens. `title` is a non-empty string. `url` starts with `/`. `question` is optional. `type` is optional, and only `single` is accepted.
+`items` is a non-empty list. Each `id` is unique and uses lowercase letters, digits and hyphens. `title` is a non-empty string. `url` starts with `/`. `question` is optional. `type` is optional, and only `single` is accepted. `options` is optional: a list of 1 to 4 option ids. An item without it has one option. Five or more is rejected, and the error names the item.
 
 ## Notes
 
