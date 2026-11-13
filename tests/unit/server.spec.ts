@@ -6,6 +6,7 @@ import {
 	mkdirSync,
 	mkdtempSync,
 	readFileSync,
+	rmSync,
 	writeFileSync,
 } from 'node:fs';
 import { spawn } from 'node:child_process';
@@ -17,6 +18,7 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, test } from 'vitest';
 import type { ReviewEvent } from '../../src/core/events.ts';
 import { LogError } from '../../src/core/log.ts';
+import { ManifestError } from '../../src/core/manifest.ts';
 import { SessionLockedError } from '../../src/server/session-lock.ts';
 import { startServer } from '../../src/server/server.ts';
 import { openSession } from '../../src/server/session-store.ts';
@@ -595,6 +597,17 @@ describe('openSession', () => {
 		session.close();
 	});
 
+	test('openSession on an existing log with an emptied manifest resumes with a warning', async () => {
+		await app.close();
+		writeFileSync(join(root, '.review', 'manifest.yaml'), 'items: []\n');
+		const session = openSession(root, NOW);
+		expect(session.state().items.map((i) => i.id)).toEqual(['home-hero', 'pricing-table']);
+		expect(session.warning).toBe(
+			"manifest.yaml differs from the running session; keeping the session's items",
+		);
+		session.close();
+	});
+
 	test('openSession on a log with a torn last line throws LogError', async () => {
 		await app.close();
 		appendFileSync(logPath(), '{"seq":2,"at":"x","type":"item-sel');
@@ -615,6 +628,21 @@ describe('openSession', () => {
 		writeFileSync(logPath(), good);
 		const session = openSession(root, NOW);
 		session.close();
+		session.close();
+	});
+
+	test('openSession refuses to start on an empty manifest and leaves the root unlocked', async () => {
+		await app.close();
+		rmSync(logPath());
+		const manifest = join(root, '.review', 'manifest.yaml');
+		const good = readFileSync(manifest);
+		writeFileSync(manifest, 'items: []\n');
+		expect(() => openSession(root, NOW)).toThrow(ManifestError);
+		expect(() => openSession(root, NOW)).toThrow(/^items: must be a non-empty list$/);
+		expect(existsSync(logPath())).toBe(false);
+		writeFileSync(manifest, good);
+		const session = openSession(root, NOW);
+		expect(session.state().items).toHaveLength(2);
 		session.close();
 	});
 });

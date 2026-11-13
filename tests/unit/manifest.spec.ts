@@ -1,9 +1,11 @@
 // @vitest-environment node
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { ManifestError, parseManifest } from '../../src/core/manifest.ts';
+import { ManifestError, parseManifest, serializeManifest } from '../../src/core/manifest.ts';
 
 const item = (extra = '') => `  - id: a\n    title: A\n    url: /a\n${extra}`;
+const nav = (options: string) =>
+	`items:\n  - id: nav\n    title: Nav\n    url: /nav\n    options: ${options}\n`;
 const bad = (text: string, prefix: string) => {
 	const fn = () => parseManifest(text);
 	expect(fn).toThrow(ManifestError);
@@ -25,7 +27,8 @@ describe('parseManifest', () => {
 	});
 
 	it('rejects a missing items list', () => bad('foo: 1', 'items: '));
-	it('rejects an empty items list', () => bad('items: []', 'items: '));
+	it('parses an empty items list to []', () => expect(parseManifest('items: []')).toEqual([]));
+	it('rejects a non-list items', () => bad('items: 1', 'items: '));
 	it('rejects an id that does not match the pattern', () =>
 		bad('items:\n  - id: Bad_Id\n    title: A\n    url: /a', 'items[0].id: '));
 	it('rejects a duplicate id', () =>
@@ -70,4 +73,35 @@ describe('parseManifest', () => {
 	it('accepts type: single', () => {
 		expect(parseManifest(`items:\n${item('    type: single')}`)).toHaveLength(1);
 	});
+
+	it('rejects five options and names the item', () => {
+		bad(nav('[a, b, c, d, e]'), 'items[0].options: ');
+		expect(() => parseManifest(nav('[a, b, c, d, e]'))).toThrow(/"nav".*\b4\b/);
+	});
+	it('accepts up to four options', () =>
+		expect(parseManifest(nav('[a, b, c, d]'))[0]?.options).toEqual(['a', 'b', 'c', 'd']));
+	it('an item without options has none', () => {
+		const [parsed] = parseManifest(`items:\n${item()}`);
+		expect('options' in parsed).toBe(false);
+	});
+	it.each(['[a, a]', '[A]'])('rejects duplicate or malformed option ids %s', (options) =>
+		expect(() => parseManifest(nav(options))).toThrow(ManifestError),
+	);
+	it('round-trips a hand-edited manifest', () => {
+		const text = [
+			'# hand-edited by the owner',
+			'items:',
+			'  - id: home',
+			'    title: Home',
+			'    url: /',
+			'    question: Is the hero clear?',
+			'  - id: nav',
+			'    title: Nav',
+			'    url: /nav',
+			'    options: [a, b]',
+			'',
+		].join('\n');
+		expect(parseManifest(serializeManifest(parseManifest(text)))).toEqual(parseManifest(text));
+	});
+	it('serializes no items', () => expect(serializeManifest([])).toBe('items: []\n'));
 });

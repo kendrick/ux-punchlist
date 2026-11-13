@@ -65,6 +65,7 @@ describe('plugin packaging', () => {
 		const text = read('skills/review/SKILL.md');
 		expect(text).toContain('node "${CLAUDE_PLUGIN_ROOT}/src/cli.ts" start --target');
 		expect(text).toContain('.review/manifest.yaml');
+		expect(text).toContain('src/plan/cli.ts');
 		expect(text).toContain('npm install --omit=dev --prefix "${CLAUDE_PLUGIN_ROOT}"');
 	});
 
