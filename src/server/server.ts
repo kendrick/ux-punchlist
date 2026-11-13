@@ -222,7 +222,9 @@ async function serve(opts: ServerOptions, store: ReturnType<typeof openSession>)
 				// server.close() on a closed server errors with ERR_SERVER_NOT_RUNNING; tests close early and again in afterEach.
 				if (!server.listening) return resolve();
 				server.closeAllConnections();
-				server.close((e) => {
+				server.close(async (e) => {
+					// Closed sockets don't cancel a command mid-capture; hold the lock until it lands, or a new server could take the root and reuse its seq.
+					await queue;
 					// Release even on error, or this process's live pid keeps the root locked.
 					store.close();
 					if (e) reject(e);

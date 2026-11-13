@@ -86,5 +86,12 @@ export function lockSession(dir: string): () => void {
 		takeOver(path);
 	}
 	// Another server may have taken over a lock we were judged dead on; never remove theirs.
-	return releaseIfOurs(path);
+	const release = releaseIfOurs(path);
+	let released = false;
+	// A matching pid isn't enough: this process may have released and locked again, and a stale closure must not drop the new lock.
+	return () => {
+		if (released) return;
+		released = true;
+		release();
+	};
 }

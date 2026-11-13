@@ -47,6 +47,15 @@ describe('lockSession', () => {
 		expect(() => lockSession(dir)).not.toThrow();
 	});
 
+	test('an old release called again after the dir is locked anew leaves the new lock in place', () => {
+		const dir = tmp();
+		const releaseA = lockSession(dir);
+		releaseA();
+		lockSession(dir);
+		releaseA();
+		expect(() => lockSession(dir)).toThrow(SessionLockedError);
+	});
+
 	test('a lock left by a dead pid is taken over', () => {
 		const dir = tmp();
 		const dead = spawnSync(process.execPath, ['-e', '']).pid;

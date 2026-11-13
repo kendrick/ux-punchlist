@@ -367,6 +367,42 @@ describe('server', () => {
 		}
 	});
 
+	test('close holds the root locked until a command blocked in capture has landed', async () => {
+		await app.close();
+		const blocked = Promise.withResolvers<void>();
+		const started = Promise.withResolvers<void>();
+		const opts = { root, target: targetUrl, port: 0 };
+		app = await startServer({
+			...opts,
+			capture: async (_url, _selector, outPath) => {
+				started.resolve();
+				await blocked.promise;
+				writeFileSync(outPath, 'PNG');
+			},
+		});
+		const comment = post({
+			type: 'comment',
+			itemId: 'home-hero',
+			selector: 'h1',
+			text: 'Blocked',
+			pageUrl: `${app.url}/`,
+		}).catch(() => {}); // close() drops the socket under it
+		await started.promise;
+		let closed = false;
+		const closing = app.close().then(() => (closed = true));
+		await new Promise((r) => setTimeout(r, 50));
+		expect(closed).toBe(false);
+		await expect(startServer({ ...opts, capture: async () => {} })).rejects.toThrow(
+			SessionLockedError,
+		);
+		blocked.resolve();
+		await closing;
+		await comment;
+		expect(readEvents().at(-1)).toMatchObject({ type: 'comment-pinned', text: 'Blocked' });
+		app = await startServer({ ...opts, capture: async () => {} });
+		expect((await fetch(`${app.url}/__punchlist/state`)).status).toBe(200);
+	});
+
 	test('a startServer that rejects on a bad target leaves the root unlocked for the next one', async () => {
 		await app.close();
 		const opts = { root, port: 0, capture: async () => {} };
