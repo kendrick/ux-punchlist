@@ -74,33 +74,37 @@ describe('plugin packaging', () => {
 		expect(text).not.toMatch(/\bnpm install\b|\bnpx\b/);
 	});
 
-	it('the install step in a clean plugin root creates no package-lock.json', () => {
-		const line = read('skills/review/SKILL.md')
-			.split('\n')
-			.map((l) => l.trim())
-			.find((l) => l.startsWith('pnpm install'));
-		expect(line).toBeDefined();
+	it(
+		'the pnpm install line in a clean plugin root creates no package-lock.json',
+		{ timeout: 120_000 },
+		() => {
+			const line = read('skills/review/SKILL.md')
+				.split('\n')
+				.map((l) => l.trim())
+				.find((l) => l.startsWith('pnpm install'));
+			expect(line).toBeDefined();
 
-		const dir = mkdtempSync(join(tmpdir(), 'plugin-root-'));
-		try {
-			for (const f of ['package.json', 'pnpm-lock.yaml', 'pnpm-workspace.yaml']) {
-				copyFileSync(root + f, join(dir, f));
+			const dir = mkdtempSync(join(tmpdir(), 'plugin-root-'));
+			try {
+				for (const f of ['package.json', 'pnpm-lock.yaml', 'pnpm-workspace.yaml']) {
+					copyFileSync(root + f, join(dir, f));
+				}
+				// cwd stays at the repo root: the line must work via --dir alone.
+				const result = spawnSync('sh', ['-c', line!], {
+					cwd: root,
+					env: { ...process.env, CLAUDE_PLUGIN_ROOT: dir },
+					encoding: 'utf8',
+				});
+				expect(result.status, result.stdout + result.stderr).toBe(0);
+				expect(existsSync(join(dir, 'package-lock.json'))).toBe(false);
+				expect(existsSync(join(dir, 'node_modules/yaml'))).toBe(true);
+				expect(existsSync(join(dir, 'node_modules/playwright'))).toBe(true);
+				expect(existsSync(join(dir, 'node_modules/vitest'))).toBe(false);
+			} finally {
+				rmSync(dir, { recursive: true, force: true });
 			}
-			// cwd stays at the repo root: the line must work via --dir alone.
-			const result = spawnSync('sh', ['-c', line!], {
-				cwd: root,
-				env: { ...process.env, CLAUDE_PLUGIN_ROOT: dir },
-				encoding: 'utf8',
-			});
-			expect(result.status, result.stdout + result.stderr).toBe(0);
-			expect(existsSync(join(dir, 'package-lock.json'))).toBe(false);
-			expect(existsSync(join(dir, 'node_modules/yaml'))).toBe(true);
-			expect(existsSync(join(dir, 'node_modules/playwright'))).toBe(true);
-			expect(existsSync(join(dir, 'node_modules/vitest'))).toBe(false);
-		} finally {
-			rmSync(dir, { recursive: true, force: true });
-		}
-	}, 120_000);
+		},
+	);
 
 	it('LICENSE is the MIT text for Kendrick Arnett', () => {
 		const text = read('LICENSE');
