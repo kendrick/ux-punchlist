@@ -84,4 +84,6 @@ export function parseManifest(text: string): Item[] {
 	});
 }
 
-export const serializeManifest = (items: Item[]): string => stringify({ items });
+// yaml's default `>` folded blocks lose spaces on re-parse, so write `|` literals; lineWidth 0 only keeps long titles on one line for hand editing.
+export const serializeManifest = (items: Item[]): string =>
+	stringify({ items }, { blockQuote: 'literal', lineWidth: 0 });
