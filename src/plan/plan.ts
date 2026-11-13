@@ -12,8 +12,8 @@ export function planItems(changed: string[], appDir: string): Item[] {
 	const pages = new Map<string, string>(); // url -> unencoded path used for the id
 	for (const file of changed) {
 		const rel = posix.relative(appDir, file);
-		if (rel.startsWith('..') || !rel.endsWith('.html')) continue;
-		// shortcut: assets can't be traced to the pages that use them; upgrade when a framework route map exists.
+		// shortcut: only .html files count, since assets can't be traced to the pages using them; upgrade when a framework route map exists.
+		if (rel === '..' || rel.startsWith('../') || !rel.endsWith('.html')) continue;
 		const path = rel.replace(/(^|\/)index\.html$/, '$1');
 		pages.set('/' + path.split('/').map(encodeURIComponent).join('/'), path);
 	}

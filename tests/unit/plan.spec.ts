@@ -22,7 +22,7 @@ describe('planItems', () => {
 		expect(planItems(['other/index.html'], 'app')).toEqual([]);
 	});
 
-	it('nested index', () => {
+	it('maps a nested index.html to a trailing-slash url and a dir-name id', () => {
 		const [item, ...rest] = planItems(['app/docs/index.html'], 'app');
 		expect(rest).toEqual([]);
 		expect(item?.url).toBe('/docs/');
@@ -35,10 +35,14 @@ describe('planItems', () => {
 		expect(parseManifest(serializeManifest(items))).toEqual(items);
 	});
 
-	it('spaces and capitals', () => {
+	it('percent-encodes spaces in the url and lowercases and hyphenates the id', () => {
 		const items = planItems(['My Page.html'], '.');
 		expect(items.map((i) => [i.url, i.id])).toEqual([['/My%20Page.html', 'my-page']]);
 		expect(parseManifest(serializeManifest(items))).toEqual(items);
+	});
+
+	it('keeps a file whose name merely starts with two dots', () => {
+		expect(planItems(['app/..draft.html'], 'app').map((i) => i.url)).toEqual(['/..draft.html']);
 	});
 
 	it('has no options key', () => {

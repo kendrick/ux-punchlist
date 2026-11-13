@@ -55,7 +55,7 @@ export function parseManifest(text: string): Item[] {
 				`${p}.type: ${JSON.stringify(type).replace(/^"|"$/g, '')} items are not supported yet`,
 			);
 		}
-		const opts: string[] = [];
+		const validOptions: string[] = [];
 		if (options !== undefined) {
 			if (!Array.isArray(options) || options.length === 0) {
 				throw new ManifestError(`${p}.options: must be a non-empty list`);
@@ -69,8 +69,9 @@ export function parseManifest(text: string): Item[] {
 				if (typeof o !== 'string' || !ID.test(o)) {
 					throw new ManifestError(`${p}.options: must match ${ID} (got ${JSON.stringify(o)})`);
 				}
-				if (opts.includes(o)) throw new ManifestError(`${p}.options: duplicate option "${o}"`);
-				opts.push(o);
+				if (validOptions.includes(o))
+					throw new ManifestError(`${p}.options: duplicate option "${o}"`);
+				validOptions.push(o);
 			}
 		}
 		// Optional keys only appear when the file has them, so items from older logs still toEqual fresh parses.
@@ -79,7 +80,7 @@ export function parseManifest(text: string): Item[] {
 			title,
 			url,
 			...(question === undefined ? {} : { question }),
-			...(options === undefined ? {} : { options: opts }),
+			...(options === undefined ? {} : { options: validOptions }),
 		};
 	});
 }

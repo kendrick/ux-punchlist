@@ -1,6 +1,6 @@
 import { execFileSync } from 'node:child_process';
 import { mkdirSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, relative, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 import { serializeManifest } from '../core/manifest.ts';
 import { planItems } from './plan.ts';
@@ -21,10 +21,13 @@ const fail = (reason: string): never => {
 try {
 	const diff = execFileSync(
 		'git',
-		['diff', '--name-only', '--diff-filter=d', `${values.base}...HEAD`],
+		['diff', '--relative', '--name-only', '--diff-filter=d', `${values.base}...HEAD`],
 		{ cwd: values.root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] },
 	);
-	const items = planItems(diff.split('\n').filter(Boolean), values.app.replace(/^\.\/|\/$/g, ''));
+	const items = planItems(
+		diff.split('\n').filter(Boolean),
+		relative(values.root, resolve(values.root, values.app)) || '.',
+	);
 	const dir = join(values.root, '.review');
 	mkdirSync(dir, { recursive: true });
 	// Flag wx: never clobber a manifest the owner may have hand-edited.
@@ -32,7 +35,7 @@ try {
 	console.log(
 		items.length === 0
 			? 'punchlist: plan: no reviewable changes'
-			: `punchlist: plan: wrote ${items.length} items to .review/manifest.yaml`,
+			: `punchlist: plan: wrote ${items.length} ${items.length === 1 ? 'item' : 'items'} to .review/manifest.yaml`,
 	);
 } catch (e) {
 	const err = e instanceof Error ? e : new Error(String(e));

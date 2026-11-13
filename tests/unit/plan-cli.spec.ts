@@ -1,5 +1,13 @@
 import { execFileSync, spawnSync } from 'node:child_process';
-import { cpSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import {
+	cpSync,
+	existsSync,
+	mkdirSync,
+	mkdtempSync,
+	readFileSync,
+	rmSync,
+	writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -53,7 +61,7 @@ describe('plan cli', () => {
 
 	it('writes no items for test and doc changes', { timeout: 60_000 }, () => {
 		writeFileSync(join(tmp, 'README.md'), '# hi');
-		execFileSync('mkdir', ['-p', join(tmp, 'tests')]);
+		mkdirSync(join(tmp, 'tests'));
 		writeFileSync(join(tmp, 'tests', 'a.spec.ts'), '');
 		commit('docs and tests');
 		const r = plan();
@@ -66,7 +74,6 @@ describe('plan cli', () => {
 		changeTwoPages();
 		expect(plan().status).toBe(0);
 		const text = readFileSync(manifestPath(), 'utf8');
-		// Hand edit: drop the pricing item's block from the YAML text.
 		const blocks = text.split(/^(?=  - )/m);
 		writeFileSync(manifestPath(), blocks.filter((b) => !b.includes('/pricing.html')).join(''));
 		const session = openSession(tmp, () => 'now');
@@ -75,6 +82,32 @@ describe('plan cli', () => {
 		} finally {
 			session.close();
 		}
+	});
+
+	it('finds changed pages when the project sits in a repo subfolder', { timeout: 60_000 }, () => {
+		mkdirSync(join(tmp, 'web'));
+		git('mv', 'app', 'web/app');
+		commit('move into web');
+		git('switch', '-c', 'sub');
+		writeFileSync(join(tmp, 'web', 'app', 'index.html'), '<!-- x -->');
+		commit('change page');
+		const r = spawnSync(
+			process.execPath,
+			[cli, '--app', 'app', '--root', join(tmp, 'web'), '--base', 'feature'],
+			{ encoding: 'utf8' },
+		);
+		expect(r.stdout).toContain('wrote 1 item to');
+		expect(
+			parseManifest(readFileSync(join(tmp, 'web', '.review', 'manifest.yaml'), 'utf8')).map(
+				(i) => i.url,
+			),
+		).toEqual(['/']);
+	});
+
+	it('accepts an absolute --app path', { timeout: 60_000 }, () => {
+		changeTwoPages();
+		const r = plan('--app', join(tmp, 'app'));
+		expect(r.stdout).toContain('wrote 2 items');
 	});
 
 	it('refuses to overwrite', { timeout: 60_000 }, () => {
