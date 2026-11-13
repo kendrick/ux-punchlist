@@ -212,12 +212,14 @@ export async function startServer(opts: {
 		warning: store.warning,
 		close: () =>
 			new Promise<void>((resolve, reject) => {
+				// server.close() on a closed server errors with ERR_SERVER_NOT_RUNNING; tests close early and again in afterEach.
 				if (!server.listening) return resolve();
 				server.closeAllConnections();
 				server.close((e) => {
-					if (e) return reject(e);
+					// Release even on error, or this process's live pid keeps the root locked.
 					store.close();
-					resolve();
+					if (e) reject(e);
+					else resolve();
 				});
 			}),
 	};

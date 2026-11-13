@@ -338,6 +338,34 @@ describe('server', () => {
 		expect(await rawPost(body, headers)).toBe(200);
 		expect(readEvents().at(-1)).toMatchObject({ type: 'comment-pinned', pageUrl: `${targetUrl}/` });
 	});
+
+	test('a second server on a different root runs beside the first, each serving its own items', async () => {
+		const other = mkdtempSync(join(tmpdir(), 'punchlist-server-'));
+		mkdirSync(join(other, '.review'));
+		writeFileSync(
+			join(other, '.review', 'manifest.yaml'),
+			'items:\n  - id: other-root\n    title: Other\n    url: /other\n',
+		);
+		const second = await startServer({
+			root: other,
+			target: targetUrl,
+			port: 0,
+			capture: async () => {},
+		});
+		try {
+			const [first, own] = await Promise.all(
+				[app.url, second.url].map(async (url) =>
+					(await (await fetch(`${url}/__punchlist/state`)).json()).items.map(
+						(i: { id: string }) => i.id,
+					),
+				),
+			);
+			expect(first).toEqual(['home-hero', 'pricing-table']);
+			expect(own).toEqual(['other-root']);
+		} finally {
+			await second.close();
+		}
+	});
 });
 
 describe('host allowlist and body cap', () => {
