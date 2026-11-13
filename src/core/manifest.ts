@@ -4,6 +4,7 @@ import type { Item } from './events.ts';
 export class ManifestError extends Error {}
 
 const ID = /^[a-z0-9][a-z0-9-]*$/;
+const BASE = 'http://review.invalid';
 
 const isRecord = (v: unknown): v is Record<string, unknown> =>
 	typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -36,8 +37,11 @@ export function parseManifest(text: string): Item[] {
 		if (typeof title !== 'string' || title.trim() === '') {
 			throw new ManifestError(`${p}.title: must be a non-empty string`);
 		}
-		if (typeof url !== 'string' || !url.startsWith('/')) {
-			throw new ManifestError(`${p}.url: must be a string starting with "/"`);
+		// The tray location.assign()s this; the URL parser reads `//`, `/\` and `/<tab>/` as another host.
+		if (typeof url !== 'string' || !url.startsWith('/') || new URL(url, BASE).origin !== BASE) {
+			throw new ManifestError(
+				`${p}.url: must be a path on the review server, starting with a single "/"`,
+			);
 		}
 		if (question !== undefined && typeof question !== 'string') {
 			throw new ManifestError(`${p}.question: must be a string`);

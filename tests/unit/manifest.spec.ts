@@ -34,6 +34,16 @@ describe('parseManifest', () => {
 		bad('items:\n  - id: a\n    title: " "\n    url: /a', 'items[0].title: '));
 	it('rejects a url without a leading slash', () =>
 		bad('items:\n  - id: a\n    title: A\n    url: a.html', 'items[0].url: '));
+	it.each(['//evil.example/', '/\\evil.example/', '/\t/evil.example/', '/\n/evil.example'])(
+		'rejects a url %j that resolves off the review origin',
+		(url) =>
+			bad(`items:\n  - id: a\n    title: A\n    url: ${JSON.stringify(url)}`, 'items[0].url: '),
+	);
+	it.each(['/a//b', '/pricing.html#plans', '/%2F%2Fevil'])('accepts a same-origin url %j', (url) =>
+		expect(
+			parseManifest(`items:\n  - id: a\n    title: A\n    url: ${JSON.stringify(url)}`)[0]?.url,
+		).toBe(url),
+	);
 	it('rejects a non-string question', () =>
 		bad(`items:\n${item('    question: 5')}`, 'items[0].question: '));
 	it('rejects journey items', () =>
