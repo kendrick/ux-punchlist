@@ -1,5 +1,6 @@
 import { execFileSync, spawnSync } from 'node:child_process';
 import {
+	chmodSync,
 	cpSync,
 	existsSync,
 	mkdirSync,
@@ -45,6 +46,14 @@ const changeTwoPages = () => {
 	for (const f of ['index.html', 'pricing.html'])
 		writeFileSync(join(tmp, 'app', f), readFileSync(join(tmp, 'app', f), 'utf8') + '\n<!-- x -->');
 	commit('change pages');
+};
+
+// One punchlist line, nothing else: no stack trace, no usage dump.
+const expectOneLine = (r: ReturnType<typeof plan>, mentions: string) => {
+	expect(r.status).not.toBe(0);
+	expect(r.stderr).toMatch(/^punchlist: plan: [^\n]+\n$/);
+	expect(r.stderr).not.toContain('    at ');
+	expect(r.stderr).toContain(mentions);
 };
 
 describe('plan cli', () => {
@@ -211,6 +220,43 @@ describe('plan cli', () => {
 			expect(r.stderr).toBe('punchlist: plan: .review exists and is not a directory\n');
 		},
 	);
+
+	describe('argument errors', () => {
+		it('an unknown flag prints one punchlist line', { timeout: 60_000 }, () => {
+			expectOneLine(plan('--bse', 'main'), '--bse');
+		});
+
+		it('a stray positional prints one punchlist line', { timeout: 60_000 }, () => {
+			expectOneLine(plan('extra'), 'extra');
+		});
+
+		it('a flag with no value prints one punchlist line', { timeout: 60_000 }, () => {
+			expectOneLine(plan('--base'), '--base');
+		});
+
+		it('an empty --base= prints one punchlist line', { timeout: 60_000 }, () => {
+			expectOneLine(plan('--base='), '--base');
+		});
+
+		// root ignores mode bits, so the directory would stay readable.
+		it.skipIf(process.getuid?.() === 0)(
+			'EACCES on --root prints one punchlist line',
+			{ timeout: 60_000 },
+			() => {
+				const locked = join(tmp, 'locked');
+				mkdirSync(join(locked, 'child'), { recursive: true });
+				chmodSync(locked, 0o000);
+				try {
+					const r = spawnSync(process.execPath, [cli, '--root', join(locked, 'child')], {
+						encoding: 'utf8',
+					});
+					expectOneLine(r, 'EACCES');
+				} finally {
+					chmodSync(locked, 0o755);
+				}
+			},
+		);
+	});
 
 	it('plans a changed page with a non-ASCII name', { timeout: 60_000 }, () => {
 		writeFileSync(join(tmp, 'app', 'ü.html'), '<p>ü</p>');
