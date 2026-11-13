@@ -1,4 +1,10 @@
-export type Item = { id: string; title: string; url: string; question?: string };
+export type Item = {
+	id: string;
+	title: string;
+	url: string;
+	question?: string;
+	options?: string[];
+};
 
 // seq starts at 1 and climbs by 1; at is an ISO 8601 string.
 export type EventBase = { seq: number; at: string };

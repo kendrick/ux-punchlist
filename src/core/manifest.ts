@@ -1,9 +1,10 @@
-import { parse } from 'yaml';
+import { parse, stringify } from 'yaml';
 import type { Item } from './events.ts';
 
 export class ManifestError extends Error {}
 
 const ID = /^[a-z0-9][a-z0-9-]*$/;
+const MAX_OPTIONS = 4;
 const PROBE_ORIGINS = ['http://review.invalid', 'http://probe.invalid'];
 
 const isRecord = (v: unknown): v is Record<string, unknown> =>
@@ -28,7 +29,7 @@ export function parseManifest(text: string): Item[] {
 		if (!isRecord(raw)) {
 			throw new ManifestError(`${p}: must be a mapping`);
 		}
-		const { id, title, url, question, type } = raw;
+		const { id, title, url, question, type, options } = raw;
 		if (typeof id !== 'string' || !ID.test(id)) {
 			throw new ManifestError(`${p}.id: must match ${ID} (got ${JSON.stringify(id)})`);
 		}
@@ -54,6 +55,33 @@ export function parseManifest(text: string): Item[] {
 				`${p}.type: ${JSON.stringify(type).replace(/^"|"$/g, '')} items are not supported yet`,
 			);
 		}
-		return question === undefined ? { id, title, url } : { id, title, url, question };
+		const opts: string[] = [];
+		if (options !== undefined) {
+			if (!Array.isArray(options) || options.length === 0) {
+				throw new ManifestError(`${p}.options: must be a non-empty list`);
+			}
+			if (options.length > MAX_OPTIONS) {
+				throw new ManifestError(
+					`${p}.options: item "${id}" has ${options.length} options, at most ${MAX_OPTIONS} allowed`,
+				);
+			}
+			for (const o of options) {
+				if (typeof o !== 'string' || !ID.test(o)) {
+					throw new ManifestError(`${p}.options: must match ${ID} (got ${JSON.stringify(o)})`);
+				}
+				if (opts.includes(o)) throw new ManifestError(`${p}.options: duplicate option "${o}"`);
+				opts.push(o);
+			}
+		}
+		// Optional keys only appear when the file has them, so items from older logs still toEqual fresh parses.
+		return {
+			id,
+			title,
+			url,
+			...(question === undefined ? {} : { question }),
+			...(options === undefined ? {} : { options: opts }),
+		};
 	});
 }
+
+export const serializeManifest = (items: Item[]): string => stringify({ items });
