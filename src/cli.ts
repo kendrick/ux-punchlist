@@ -1,6 +1,7 @@
 import { parseArgs } from 'node:util';
 import { LogError } from './core/log.ts';
 import { ManifestError } from './core/manifest.ts';
+import { SessionLockedError } from './server/session-lock.ts';
 import { createScreenshotter } from './server/screenshot.ts';
 import { startServer } from './server/server.ts';
 
@@ -36,7 +37,8 @@ try {
 	// Playwright adds its own SIGTERM listener once Chromium launches, which stops Node's default exit.
 	process.once('SIGTERM', stop);
 } catch (e) {
-	if (!(e instanceof LogError || e instanceof ManifestError)) throw e;
+	if (!(e instanceof LogError || e instanceof ManifestError || e instanceof SessionLockedError))
+		throw e;
 	console.error(`punchlist: ${e.message}`);
 	process.exit(1);
 }

@@ -21,7 +21,7 @@ export function makeRoot(manifest?: string): string {
 export function startPunchlist(
 	root: string,
 	target: string,
-): Promise<{ url: string; kill(): void }> {
+): Promise<{ url: string; kill(): Promise<void> }> {
 	const child = spawn(
 		'node',
 		[join(repo, 'src', 'cli.ts'), 'start', '--target', target, '--root', root],
@@ -35,7 +35,15 @@ export function startPunchlist(
 			const m = out.match(/punchlist: listening on (\S+)/);
 			if (m) {
 				child.removeAllListeners('exit');
-				resolve({ url: m[1], kill: () => void child.kill('SIGKILL') });
+				resolve({
+					url: m[1],
+					kill: () => {
+						if (child.exitCode !== null || child.signalCode !== null) return Promise.resolve();
+						const exited = new Promise<void>((r) => child.once('exit', () => r()));
+						child.kill('SIGKILL');
+						return exited;
+					},
+				});
 			}
 		});
 	});

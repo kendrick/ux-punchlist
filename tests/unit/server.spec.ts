@@ -17,6 +17,7 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, test } from 'vitest';
 import type { ReviewEvent } from '../../src/core/events.ts';
 import { LogError } from '../../src/core/log.ts';
+import { SessionLockedError } from '../../src/server/session-lock.ts';
 import { startServer } from '../../src/server/server.ts';
 import { openSession } from '../../src/server/session-store.ts';
 
@@ -337,6 +338,78 @@ describe('server', () => {
 		expect(await rawPost(body, headers)).toBe(200);
 		expect(readEvents().at(-1)).toMatchObject({ type: 'comment-pinned', pageUrl: `${targetUrl}/` });
 	});
+
+	test('a second server on a different root runs beside the first, each serving its own items', async () => {
+		const other = mkdtempSync(join(tmpdir(), 'punchlist-server-'));
+		mkdirSync(join(other, '.review'));
+		writeFileSync(
+			join(other, '.review', 'manifest.yaml'),
+			'items:\n  - id: other-root\n    title: Other\n    url: /other\n',
+		);
+		const second = await startServer({
+			root: other,
+			target: targetUrl,
+			port: 0,
+			capture: async () => {},
+		});
+		try {
+			const [first, own] = await Promise.all(
+				[app.url, second.url].map(async (url) =>
+					(await (await fetch(`${url}/__punchlist/state`)).json()).items.map(
+						(i: { id: string }) => i.id,
+					),
+				),
+			);
+			expect(first).toEqual(['home-hero', 'pricing-table']);
+			expect(own).toEqual(['other-root']);
+		} finally {
+			await second.close();
+		}
+	});
+
+	test('close holds the root locked until a command blocked in capture has landed', async () => {
+		await app.close();
+		const blocked = Promise.withResolvers<void>();
+		const started = Promise.withResolvers<void>();
+		const opts = { root, target: targetUrl, port: 0 };
+		app = await startServer({
+			...opts,
+			capture: async (_url, _selector, outPath) => {
+				started.resolve();
+				await blocked.promise;
+				writeFileSync(outPath, 'PNG');
+			},
+		});
+		const comment = post({
+			type: 'comment',
+			itemId: 'home-hero',
+			selector: 'h1',
+			text: 'Blocked',
+			pageUrl: `${app.url}/`,
+		}).catch(() => {}); // close() drops the socket under it
+		await started.promise;
+		let closed = false;
+		const closing = app.close().then(() => (closed = true));
+		await new Promise((r) => setTimeout(r, 50));
+		expect(closed).toBe(false);
+		await expect(startServer({ ...opts, capture: async () => {} })).rejects.toThrow(
+			SessionLockedError,
+		);
+		blocked.resolve();
+		await closing;
+		await comment;
+		expect(readEvents().at(-1)).toMatchObject({ type: 'comment-pinned', text: 'Blocked' });
+		app = await startServer({ ...opts, capture: async () => {} });
+		expect((await fetch(`${app.url}/__punchlist/state`)).status).toBe(200);
+	});
+
+	test('a startServer that rejects on a bad target leaves the root unlocked for the next one', async () => {
+		await app.close();
+		const opts = { root, port: 0, capture: async () => {} };
+		await expect(startServer({ ...opts, target: 'not a url' })).rejects.toThrow(TypeError);
+		app = await startServer({ ...opts, target: targetUrl });
+		expect((await fetch(`${app.url}/__punchlist/state`)).status).toBe(200);
+	});
 });
 
 describe('host allowlist and body cap', () => {
@@ -448,12 +521,68 @@ describe('cli', () => {
 			}
 		},
 	);
+
+	test(
+		'a second CLI on a held root exits 1 naming the holder, and a new one starts after SIGTERM',
+		{ timeout: 60_000 },
+		async () => {
+			const cliRoot = mkdtempSync(join(tmpdir(), 'punchlist-cli-'));
+			mkdirSync(join(cliRoot, '.review'));
+			copyFileSync(
+				join(import.meta.dirname, '../../fixtures/manifest.yaml'),
+				join(cliRoot, '.review', 'manifest.yaml'),
+			);
+			const spawnCli = () =>
+				spawn(process.execPath, [
+					join(import.meta.dirname, '../../src/cli.ts'),
+					'start',
+					'--target',
+					targetUrl,
+					'--root',
+					cliRoot,
+				]);
+			const listening = (cli: ReturnType<typeof spawnCli>) =>
+				new Promise<void>((resolve, reject) => {
+					let out = '';
+					cli.stdout?.on('data', (c) => {
+						out += c;
+						if (/listening on/.test(out)) resolve();
+					});
+					cli.on('exit', () => reject(new Error(`cli exited early: ${out}`)));
+				});
+			const clis: ReturnType<typeof spawnCli>[] = [];
+			const start = () => {
+				const cli = spawnCli();
+				clis.push(cli);
+				return cli;
+			};
+			try {
+				const a = start();
+				await listening(a);
+				const before = readFileSync(join(cliRoot, '.review', 'events.jsonl'));
+				const b = start();
+				let err = '';
+				b.stderr?.on('data', (c) => (err += c));
+				const timeout = new Promise((r) => setTimeout(() => r('timeout'), 5000));
+				expect(await Promise.race([once(b, 'exit'), timeout])).toEqual([1, null]);
+				expect(err).toContain(`pid ${a.pid}`);
+				expect(readFileSync(join(cliRoot, '.review', 'events.jsonl')).equals(before)).toBe(true);
+				const aExited = once(a, 'exit');
+				a.kill('SIGTERM');
+				await aExited;
+				await listening(start());
+			} finally {
+				for (const cli of clis) cli.kill('SIGKILL');
+			}
+		},
+	);
 });
 
 describe('openSession', () => {
 	test("openSession on an existing log with an edited manifest keeps the log's items and sets warning", async () => {
 		expect(app.warning).toBeNull();
 		expect(readEvents()[0]).toMatchObject({ type: 'session-started' });
+		await app.close();
 		writeFileSync(
 			join(root, '.review', 'manifest.yaml'),
 			'items:\n  - id: brand-new\n    title: New\n    url: /new\n',
@@ -463,10 +592,29 @@ describe('openSession', () => {
 		expect(session.warning).toBe(
 			"manifest.yaml differs from the running session; keeping the session's items",
 		);
+		session.close();
 	});
 
-	test('openSession on a log with a torn last line throws LogError', () => {
+	test('openSession on a log with a torn last line throws LogError', async () => {
+		await app.close();
 		appendFileSync(logPath(), '{"seq":2,"at":"x","type":"item-sel');
 		expect(() => openSession(root, NOW)).toThrow(LogError);
+	});
+
+	test('openSession on a root a running server holds throws SessionLockedError', () => {
+		const before = readFileSync(logPath());
+		expect(() => openSession(root, NOW)).toThrow(SessionLockedError);
+		expect(readFileSync(logPath()).equals(before)).toBe(true);
+	});
+
+	test('openSession that throws LogError leaves the root unlocked', async () => {
+		await app.close();
+		const good = readFileSync(logPath());
+		appendFileSync(logPath(), '{"seq":2,"at":"x","type":"item-sel');
+		expect(() => openSession(root, NOW)).toThrow(LogError);
+		writeFileSync(logPath(), good);
+		const session = openSession(root, NOW);
+		session.close();
+		session.close();
 	});
 });
