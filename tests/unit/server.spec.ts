@@ -97,7 +97,10 @@ beforeEach(async () => {
 	target = http.createServer((req, res) => {
 		seen.push(req.headers);
 		if (req.url === '/style.css') res.writeHead(200, { 'content-type': 'text/css' }).end(CSS);
-		else if (req.url === '/torn.html') {
+		else if (req.url === '/torn.css') {
+			res.writeHead(200, { 'content-type': 'text/css', 'content-length': '1000' });
+			res.write('body {', () => res.destroy());
+		} else if (req.url === '/torn.html') {
 			res.writeHead(200, { 'content-type': 'text/html', 'content-length': '1000' });
 			res.write('<html>', () => res.destroy());
 		} else if (req.url === '/redirect' || req.url === '/redirect.html') {
@@ -307,6 +310,14 @@ describe('server', () => {
 		} finally {
 			process.off('unhandledRejection', onRejection);
 		}
+	});
+
+	test('a streamed resource the target drops mid-response fails instead of hanging', async () => {
+		const err = await fetch(`${app.url}/torn.css`, { signal: AbortSignal.timeout(1000) })
+			.then((r) => r.text())
+			.catch((e: Error) => e);
+		expect(err).toBeInstanceOf(Error);
+		expect(err instanceof Error && err.name).not.toBe('TimeoutError');
 	});
 
 	test('a comment sent through localhost is accepted when Host matches', async () => {

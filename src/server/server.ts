@@ -3,6 +3,7 @@ import http, { type IncomingMessage, type ServerResponse } from 'node:http';
 import https from 'node:https';
 import { stripTypeScriptTypes } from 'node:module';
 import { join } from 'node:path';
+import { pipeline } from 'node:stream';
 import type { Command } from '../core/events.ts';
 import { CommandError, decide } from '../core/session.ts';
 import { allowTrayConnect, injectTray, scriptNonce } from './inject.ts';
@@ -153,7 +154,8 @@ export async function startServer(opts: {
 				const encoding = headers['content-encoding'];
 				if (!type.startsWith('text/html') || (encoding && encoding !== 'identity')) {
 					res.writeHead(up.statusCode ?? 502, headers);
-					up.pipe(res);
+					// pipe() leaves res open when the target drops mid-body; pipeline destroys it so the browser's request fails.
+					pipeline(up, res, () => {});
 					return;
 				}
 				const { 'content-length': _len, ...rest } = headers;
