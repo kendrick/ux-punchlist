@@ -5,6 +5,12 @@ import { planItems } from '../../src/plan/plan.ts';
 
 const q = (url: string) => `Does ${url} look and work as intended after this branch's changes?`;
 
+const idsOf = (changed: string[]) => planItems(changed, 'app').map((i) => i.id);
+const wellFormed = (ids: string[]) => {
+	for (const id of ids) expect(id).toMatch(/^[a-z0-9][a-z0-9-]*$/);
+	expect(new Set(ids).size).toBe(ids.length);
+};
+
 describe('planItems', () => {
 	it('two changed pages give two items', () => {
 		const items = planItems(['app/index.html', 'app/pricing.html'], 'app');
@@ -44,6 +50,34 @@ describe('planItems', () => {
 
 	it('keeps a file whose name merely starts with two dots', () => {
 		expect(planItems(['app/..draft.html'], 'app').map((i) => i.url)).toEqual(['/..draft.html']);
+	});
+
+	it('transliterates ü and keeps index.html as home', () => {
+		const ids = idsOf(['app/ü.html', 'app/index.html']);
+		expect(ids).toHaveLength(2);
+		expect(ids).toEqual(expect.arrayContaining(['home', 'u']));
+		wellFormed(ids);
+	});
+
+	it('transliterates a longer name', () => {
+		const ids = idsOf(['app/ünd.html', 'app/Straße.html']);
+		expect(ids).toHaveLength(2);
+		expect(ids).toEqual(expect.arrayContaining(['strasse', 'und']));
+		wellFormed(ids);
+	});
+
+	it('a name with no letters or digits still falls back', () => {
+		const ids = idsOf(['app/_.html']);
+		expect(ids).toEqual(['home']);
+		wellFormed(ids);
+	});
+
+	it('composed and decomposed ü give the same id', () => {
+		for (const name of ['ü', 'ü']) {
+			const ids = idsOf([`app/${name}.html`]);
+			expect(ids).toEqual(['u']);
+			wellFormed(ids);
+		}
 	});
 
 	it('has no options key', () => {
