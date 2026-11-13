@@ -4,7 +4,7 @@ import type { Item } from './events.ts';
 export class ManifestError extends Error {}
 
 const ID = /^[a-z0-9][a-z0-9-]*$/;
-const BASE = 'http://review.invalid';
+const PROBE_ORIGIN = 'http://review.invalid';
 
 const isRecord = (v: unknown): v is Record<string, unknown> =>
 	typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -37,11 +37,15 @@ export function parseManifest(text: string): Item[] {
 		if (typeof title !== 'string' || title.trim() === '') {
 			throw new ManifestError(`${p}.title: must be a non-empty string`);
 		}
-		// The tray location.assign()s this; the URL parser reads `//`, `/\` and `/<tab>/` as another host.
-		if (typeof url !== 'string' || !url.startsWith('/') || new URL(url, BASE).origin !== BASE) {
-			throw new ManifestError(
-				`${p}.url: must be a path on the review server, starting with a single "/"`,
-			);
+		// The tray location.assign()s this. The URL parser reads `//`, `/\` and `/<tab or newline>/` as another host,
+		// and throws on a bare `//` or `/\`, so canParse covers those too.
+		if (
+			typeof url !== 'string' ||
+			!url.startsWith('/') ||
+			!URL.canParse(url, PROBE_ORIGIN) ||
+			new URL(url, PROBE_ORIGIN).origin !== PROBE_ORIGIN
+		) {
+			throw new ManifestError(`${p}.url: must be a same-origin path starting with "/"`);
 		}
 		if (question !== undefined && typeof question !== 'string') {
 			throw new ManifestError(`${p}.question: must be a string`);
