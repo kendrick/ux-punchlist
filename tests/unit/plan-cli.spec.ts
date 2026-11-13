@@ -122,10 +122,38 @@ describe('plan cli', () => {
 		}
 	});
 
-	it('accepts --app . and the default', { timeout: 60_000 }, () => {
-		changeTwoPages();
-		const r = spawnSync(process.execPath, [cli, '--app', '.', '--root', tmp], { encoding: 'utf8' });
-		expect(r.status).toBe(0);
+	it(
+		'plans the app dir itself for --app . and for an omitted --app, with --root at the app dir',
+		{ timeout: 60_000 },
+		() => {
+			changeTwoPages();
+			const root = join(tmp, 'app');
+			for (const args of [['--app', '.'], []]) {
+				rmSync(join(root, '.review'), { recursive: true, force: true });
+				const r = spawnSync(process.execPath, [cli, ...args, '--root', root], { encoding: 'utf8' });
+				expect(r.status).toBe(0);
+				expect(r.stdout).toContain('wrote 2 items to');
+				expect(
+					parseManifest(readFileSync(join(root, '.review', 'manifest.yaml'), 'utf8')).map(
+						(i) => i.url,
+					),
+				).toEqual(['/', '/pricing.html']);
+			}
+		},
+	);
+
+	it('fails in one line on an --app that repeats the root prefix', { timeout: 60_000 }, () => {
+		mkdirSync(join(tmp, 'web'));
+		git('mv', 'app', 'web/app');
+		commit('move into web');
+		const web = join(tmp, 'web');
+		const r = spawnSync(process.execPath, [cli, '--app', 'web/app', '--root', web], {
+			encoding: 'utf8',
+		});
+		expect(r.status).toBe(1);
+		expect(r.stderr.trim().split('\n')).toHaveLength(1);
+		expect(r.stderr.startsWith('punchlist: plan: --app')).toBe(true);
+		expect(existsSync(join(web, '.review'))).toBe(false);
 	});
 
 	it('refuses to overwrite', { timeout: 60_000 }, () => {
