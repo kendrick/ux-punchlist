@@ -12,6 +12,9 @@ const bad = (text: string, prefix: string) => {
 	expect(fn).toThrow(new RegExp(`^${prefix.replace(/[[\].]/g, '\\$&')}`));
 };
 
+const roundTrip = (title: string) =>
+	parseManifest(serializeManifest([{ id: 'a', title, url: '/a' }]))[0].title;
+
 describe('parseManifest', () => {
 	it('parses fixtures/manifest.yaml into two items', () => {
 		const items = parseManifest(readFileSync('fixtures/manifest.yaml', 'utf8'));
@@ -104,4 +107,21 @@ describe('parseManifest', () => {
 		expect(parseManifest(serializeManifest(parseManifest(text)))).toEqual(parseManifest(text));
 	});
 	it('serializes no items', () => expect(serializeManifest([])).toBe('items: []\n'));
+	it('round-trips a long multi-line title that starts with a space', () => {
+		const t = ' x: #y  ' + 'w '.repeat(60) + '\n z';
+		expect(roundTrip(t)).toBe(t);
+	});
+	it('round-trips a plain one-line title', () =>
+		expect(roundTrip('Pricing page')).toBe('Pricing page'));
+	it.each(['trailing  ', '# hash', 'a: b', 'x'.repeat(300), 'line one\r\nline two', 'Ünïcödé ✓'])(
+		'round-trips awkward title %j',
+		(t) => expect(roundTrip(t)).toBe(t),
+	);
+	it('round-trips a multi-line question that starts with a space', () => {
+		const q = ' q\n r';
+		const back = parseManifest(
+			serializeManifest([{ id: 'a', title: 't', url: '/a', question: q }]),
+		);
+		expect(back[0].question).toBe(q);
+	});
 });

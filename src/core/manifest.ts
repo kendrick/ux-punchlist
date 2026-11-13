@@ -84,4 +84,6 @@ export function parseManifest(text: string): Item[] {
 	});
 }
 
-export const serializeManifest = (items: Item[]): string => stringify({ items });
+// yaml's default `>` folded blocks and line wrapping change whitespace on re-parse; literal blocks with no wrapping keep every string byte-exact.
+export const serializeManifest = (items: Item[]): string =>
+	stringify({ items }, { blockQuote: 'literal', lineWidth: 0 });
