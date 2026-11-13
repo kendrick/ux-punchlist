@@ -5,28 +5,53 @@ import { parseArgs } from 'node:util';
 import { serializeManifest } from '../core/manifest.ts';
 import { planItems } from './plan.ts';
 
-const { values } = parseArgs({
-	options: {
-		app: { type: 'string', default: '.' },
-		base: { type: 'string', default: 'main' },
-		root: { type: 'string', default: process.cwd() },
-	},
-});
-
 const fail = (reason: string): never => {
 	console.error(`punchlist: plan: ${reason}`);
 	process.exit(1);
 };
 
+const asError = (e: unknown) => (e instanceof Error ? e : new Error(String(e)));
+
+// parseArgs throws on unknown flags, stray positionals and valueless flags; its message already names the flag.
+const parse = () => {
+	try {
+		return parseArgs({
+			options: {
+				app: { type: 'string', default: '.' },
+				base: { type: 'string', default: 'main' },
+				root: { type: 'string', default: process.cwd() },
+			},
+		}).values;
+	} catch (e) {
+		return fail(asError(e).message.split('\n')[0] ?? '');
+	}
+};
+const values = parse();
+
+// `--base=` makes git diff read "...HEAD", which is valid and silently plans nothing.
+if (!values.base) fail('--base must not be empty');
+
+// Only a missing path is expected; anything else (EACCES, ELOOP) would otherwise surface as a stack trace.
+const statDir = (flag: string, path: string) => {
+	try {
+		return statSync(path, { throwIfNoEntry: false });
+	} catch (e) {
+		const err = asError(e);
+		return fail(
+			`${flag} ${path}: ${'code' in err && typeof err.code === 'string' ? err.code : err.message}`,
+		);
+	}
+};
+
 // Without these, a bad cwd surfaces as "spawnSync git ENOENT/ENOTDIR" and a non-git dir as git diff's usage dump.
-const rootStat = statSync(values.root, { throwIfNoEntry: false });
+const rootStat = statDir('--root', values.root);
 if (!rootStat) fail(`--root ${values.root} does not exist`);
 if (!rootStat?.isDirectory()) fail(`--root ${values.root} is not a directory`);
 // A mistyped --app would otherwise filter every path out and look like "no reviewable changes".
 const appDir = relative(values.root, resolve(values.root, values.app)) || '.';
 if (appDir === '..' || appDir.startsWith('../') || isAbsolute(appDir))
 	fail(`--app ${values.app} is outside --root ${values.root}`);
-if (!statSync(resolve(values.root, appDir), { throwIfNoEntry: false })?.isDirectory())
+if (!statDir('--app', resolve(values.root, appDir))?.isDirectory())
 	fail(`--app ${values.app} is not a directory under --root ${values.root}`);
 const git = (...args: string[]) =>
 	execFileSync('git', args, {
