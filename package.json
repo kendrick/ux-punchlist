@@ -10,6 +10,7 @@
 		"format": "oxfmt",
 		"lint": "oxlint --no-error-on-unmatched-pattern",
 		"lint:fix": "oxlint --no-error-on-unmatched-pattern --fix",
+		"review": "node src/cli.ts start",
 		"test": "vitest run",
 		"test:e2e": "playwright test",
 		"test:watch": "vitest",
@@ -25,5 +26,9 @@
 		"oxlint-tsgolint": "7.0.2006",
 		"typescript": "7.0.2",
 		"vitest": "5.1.0"
+	},
+	"dependencies": {
+		"playwright": "1.65.0",
+		"yaml": "2.9.1"
 	}
 }
