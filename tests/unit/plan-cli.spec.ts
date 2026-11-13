@@ -234,11 +234,8 @@ describe('plan cli', () => {
 			expectOneLine(plan('--base'), '--base');
 		});
 
-		it('an empty --base= reaches git and prints one punchlist line', { timeout: 60_000 }, () => {
-			const r = plan('--base=');
-			expect(r.status).not.toBe(0);
-			expect(r.stderr).toMatch(/^punchlist: plan: [^\n]+\n$/);
-			expect(r.stderr).not.toContain('    at ');
+		it('an empty --base= prints one punchlist line', { timeout: 60_000 }, () => {
+			expectOneLine(plan('--base='), '--base');
 		});
 
 		// root ignores mode bits, so the directory would stay readable.

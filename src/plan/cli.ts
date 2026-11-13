@@ -13,7 +13,7 @@ const fail = (reason: string): never => {
 const asError = (e: unknown) => (e instanceof Error ? e : new Error(String(e)));
 
 // parseArgs throws on unknown flags, stray positionals and valueless flags; its message already names the flag.
-const parse = () => {
+const parseCliArgs = () => {
 	try {
 		return parseArgs({
 			options: {
@@ -26,32 +26,32 @@ const parse = () => {
 		return fail(asError(e).message.split('\n')[0] ?? '');
 	}
 };
-const values = parse();
+const values = parseCliArgs();
 
 // `--base=` makes git diff read "...HEAD", which is valid and silently plans nothing.
 if (!values.base) fail('--base must not be empty');
 
 // Only a missing path is expected; anything else (EACCES, ELOOP) would otherwise surface as a stack trace.
-const statDir = (flag: string, path: string) => {
+// `what` is the flag and value as the user typed them, so the message echoes their input.
+const statOrFail = (what: string, path: string) => {
 	try {
 		return statSync(path, { throwIfNoEntry: false });
 	} catch (e) {
 		const err = asError(e);
-		return fail(
-			`${flag} ${path}: ${'code' in err && typeof err.code === 'string' ? err.code : err.message}`,
-		);
+		const reason = 'code' in err && typeof err.code === 'string' ? err.code : err.message;
+		return fail(`${what}: ${reason}`);
 	}
 };
 
 // Without these, a bad cwd surfaces as "spawnSync git ENOENT/ENOTDIR" and a non-git dir as git diff's usage dump.
-const rootStat = statDir('--root', values.root);
+const rootStat = statOrFail(`--root ${values.root}`, values.root);
 if (!rootStat) fail(`--root ${values.root} does not exist`);
 if (!rootStat?.isDirectory()) fail(`--root ${values.root} is not a directory`);
 // A mistyped --app would otherwise filter every path out and look like "no reviewable changes".
 const appDir = relative(values.root, resolve(values.root, values.app)) || '.';
 if (appDir === '..' || appDir.startsWith('../') || isAbsolute(appDir))
 	fail(`--app ${values.app} is outside --root ${values.root}`);
-if (!statDir('--app', resolve(values.root, appDir))?.isDirectory())
+if (!statOrFail(`--app ${values.app}`, resolve(values.root, appDir))?.isDirectory())
 	fail(`--app ${values.app} is not a directory under --root ${values.root}`);
 const git = (...args: string[]) =>
 	execFileSync('git', args, {
