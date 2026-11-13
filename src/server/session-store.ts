@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { Command, ReviewEvent, SessionState } from '../core/events.ts';
 import { appendEvents, readLog } from '../core/log.ts';
-import { parseManifest } from '../core/manifest.ts';
+import { ManifestError, parseManifest } from '../core/manifest.ts';
 import { decide, reduce } from '../core/session.ts';
 import { lockSession } from './session-lock.ts';
 
@@ -26,7 +26,9 @@ export function openSession(root: string, now: () => string) {
 		};
 
 		if (events.length === 0) {
-			run({ type: 'start', items: parseManifest(readFileSync(manifestPath, 'utf8')) });
+			const items = parseManifest(readFileSync(manifestPath, 'utf8'));
+			if (items.length === 0) throw new ManifestError('items: must be a non-empty list');
+			run({ type: 'start', items });
 		} else {
 			// A broken or missing manifest mid-session shouldn't block resuming; the log is the source of truth.
 			let current: unknown = null;

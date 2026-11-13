@@ -68,6 +68,7 @@ describe('plan cli', () => {
 		expect(r.status).toBe(0);
 		expect(r.stdout).toContain('no reviewable changes');
 		expect(readFileSync(manifestPath(), 'utf8')).toBe('items: []\n');
+		expect(parseManifest(readFileSync(manifestPath(), 'utf8'))).toEqual([]);
 	});
 
 	it('a hand-deleted item is gone at the next session start', { timeout: 60_000 }, () => {
@@ -127,5 +128,23 @@ describe('plan cli', () => {
 		expect(r.status).toBe(1);
 		expect(r.stderr.startsWith('punchlist: plan:')).toBe(true);
 		expect(existsSync(manifestPath())).toBe(false);
+	});
+
+	it('fails in one line on a root that is not a git repo', { timeout: 60_000 }, () => {
+		const dir = mkdtempSync(join(tmpdir(), 'plan-nogit-'));
+		try {
+			const r = spawnSync(process.execPath, [cli, '--root', dir], { encoding: 'utf8' });
+			expect(r.status).toBe(1);
+			expect(r.stderr).toMatch(/^punchlist: plan: fatal: not a git repository[^\n]*\n$/);
+		} finally {
+			rmSync(dir, { recursive: true, force: true });
+		}
+	});
+
+	it('fails in one line on a root that does not exist', { timeout: 60_000 }, () => {
+		const dir = join(tmp, 'missing');
+		const r = spawnSync(process.execPath, [cli, '--root', dir], { encoding: 'utf8' });
+		expect(r.status).toBe(1);
+		expect(r.stderr).toBe(`punchlist: plan: --root ${dir} does not exist\n`);
 	});
 });

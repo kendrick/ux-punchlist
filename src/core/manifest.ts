@@ -20,9 +20,8 @@ export function parseManifest(text: string): Item[] {
 		);
 	}
 	const list = isRecord(doc) ? doc['items'] : undefined;
-	if (!Array.isArray(list) || list.length === 0) {
-		throw new ManifestError('items: must be a non-empty list');
-	}
+	// An empty list is valid so Plan's no-changes output parses; openSession refuses to start on it.
+	if (!Array.isArray(list)) throw new ManifestError('items: must be a list');
 	const seen = new Set<string>();
 	return list.map((raw: unknown, i) => {
 		const p = `items[${i}]`;

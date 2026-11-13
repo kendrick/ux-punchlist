@@ -27,7 +27,8 @@ describe('parseManifest', () => {
 	});
 
 	it('rejects a missing items list', () => bad('foo: 1', 'items: '));
-	it('rejects an empty items list', () => bad('items: []', 'items: '));
+	it('parses an empty items list to []', () => expect(parseManifest('items: []')).toEqual([]));
+	it('rejects a non-list items', () => bad('items: 1', 'items: '));
 	it('rejects an id that does not match the pattern', () =>
 		bad('items:\n  - id: Bad_Id\n    title: A\n    url: /a', 'items[0].id: '));
 	it('rejects a duplicate id', () =>

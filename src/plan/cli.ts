@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join, relative, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 import { serializeManifest } from '../core/manifest.ts';
@@ -18,12 +18,18 @@ const fail = (reason: string): never => {
 	process.exit(1);
 };
 
+// Without these, a missing cwd surfaces as "spawnSync git ENOENT" and a non-git dir as git diff's usage dump.
+if (!existsSync(values.root)) fail(`--root ${values.root} does not exist`);
+const git = (...args: string[]) =>
+	execFileSync('git', args, {
+		cwd: values.root,
+		encoding: 'utf8',
+		stdio: ['ignore', 'pipe', 'pipe'],
+	});
+
 try {
-	const diff = execFileSync(
-		'git',
-		['diff', '--relative', '--name-only', '--diff-filter=d', `${values.base}...HEAD`],
-		{ cwd: values.root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] },
-	);
+	git('rev-parse', '--git-dir');
+	const diff = git('diff', '--relative', '--name-only', '--diff-filter=d', `${values.base}...HEAD`);
 	const items = planItems(
 		diff.split('\n').filter(Boolean),
 		relative(values.root, resolve(values.root, values.app)) || '.',
@@ -42,5 +48,5 @@ try {
 	if ('code' in err && err.code === 'EEXIST')
 		fail('.review/manifest.yaml exists; delete it to re-plan');
 	const stderr = 'stderr' in err && typeof err.stderr === 'string' ? err.stderr : '';
-	fail((stderr || err.message).trim());
+	fail((stderr || err.message).trim().split('\n')[0] ?? '');
 }

@@ -46,7 +46,7 @@ items:
     question: Does the hero say what the product does?
 ```
 
-`items` is a non-empty list. Each `id` is unique and uses lowercase letters, digits and hyphens. `title` is a non-empty string. `url` starts with `/`. `question` is optional. `type` is optional, and only `single` is accepted. `options` is optional: a list of 1 to 4 option ids. An item without it has one option. Five or more is rejected, and the error names the item.
+`items` is a list, and a session needs at least one item to start. Each `id` is unique and uses lowercase letters, digits and hyphens. `title` is a non-empty string. `url` starts with `/`. `question` is optional. `type` is optional, and only `single` is accepted. `options` is optional: a list of 1 to 4 option ids. An item without it has one option. Five or more is rejected, and the error names the item.
 
 ## Notes
 

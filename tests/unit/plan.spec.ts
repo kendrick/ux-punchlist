@@ -16,6 +16,7 @@ describe('planItems', () => {
 
 	it('tests and docs give no items', () => {
 		expect(planItems(['tests/x.spec.ts', 'README.md', 'app/style.css'], 'app')).toEqual([]);
+		expect(parseManifest(serializeManifest([]))).toEqual([]);
 	});
 
 	it('files outside the app dir are ignored', () => {
