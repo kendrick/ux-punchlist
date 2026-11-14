@@ -138,7 +138,8 @@ test('focus ring renders in the shadow root', async ({ page }) => {
 	await expect(button(page)).toBeVisible();
 	await page.keyboard.press('Tab');
 	await expect(button(page)).toBeFocused();
-	expect(await button(page).evaluate(paintedShadows)).toHaveLength(1);
+	// Basecoat's .btn transitions `all`, so the first read after Tab can land at the start of the box-shadow fade.
+	await expect.poll(() => button(page).evaluate(paintedShadows)).toHaveLength(1);
 });
 
 test('shadow, ring and transform utilities apply in the shadow root', async ({ page }) => {
@@ -146,7 +147,8 @@ test('shadow, ring and transform utilities apply in the shadow root', async ({ p
 	await button(page).click();
 	await expect(popover(page)).toBeVisible();
 	// shadow-md is two layers, ring-1 one.
-	expect(await popover(page).evaluate(paintedShadows)).toHaveLength(3);
+	// Polled for the same reason as the focus ring: the popover's box-shadow can still be mid-transition.
+	await expect.poll(() => popover(page).evaluate(paintedShadows)).toHaveLength(3);
 
 	// The tray uses no transform utility yet, so borrow Basecoat's dialog panel, which sets --tw-translate-* and --tw-scale-*.
 	const transform = await trayRoot(page).evaluate((root) => {
