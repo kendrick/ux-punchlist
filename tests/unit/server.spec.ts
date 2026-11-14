@@ -414,6 +414,37 @@ describe('server', () => {
 	});
 });
 
+describe('trayDir', () => {
+	const JS = 'export const a = 1;\n';
+
+	beforeEach(async () => {
+		await app.close();
+		const trayDir = mkdtempSync(join(tmpdir(), 'punchlist-tray-'));
+		writeFileSync(join(trayDir, 'a.js'), JS);
+		writeFileSync(join(trayDir, 'tray.ts'), 'const n: number = 1;\nexport default n;\n');
+		app = await startServer({ root, target: targetUrl, port: 0, capture: async () => {}, trayDir });
+	});
+
+	test('serves a .js file from trayDir unchanged', async () => {
+		const res = await fetch(`${app.url}/__punchlist/a.js`);
+		expect(res.status).toBe(200);
+		expect(res.headers.get('content-type')).toBe('text/javascript');
+		expect(Buffer.from(await res.arrayBuffer()).equals(Buffer.from(JS))).toBe(true);
+	});
+
+	test('serves tray.ts from trayDir with types stripped', async () => {
+		const body = await (await fetch(`${app.url}/__punchlist/tray.ts`)).text();
+		expect(body).toContain('export default n;');
+		expect(body).not.toContain(': number');
+	});
+
+	test("404s a .js name trayDir doesn't list", async () => {
+		expect((await rawGet('/__punchlist/b.js')).status).toBe(404);
+		expect((await rawGet('/__punchlist/../package.json')).status).toBe(404);
+		expect(seen).toHaveLength(0);
+	});
+});
+
 describe('host allowlist and body cap', () => {
 	const approve = JSON.stringify({ type: 'approve', itemId: 'home-hero' });
 	const json = { 'content-type': 'application/json' };

@@ -1,12 +1,6 @@
 {
 	"$schema": "./node_modules/oxlint/configuration_schema.json",
-	"plugins": [
-		"eslint",
-		"typescript",
-		"unicorn",
-		"oxc",
-		"import"
-	],
+	"plugins": ["eslint", "typescript", "unicorn", "oxc", "import"],
 	"categories": {
 		"correctness": "error",
 		"suspicious": "error"
@@ -25,6 +19,8 @@
 		"build/**",
 		"out/**",
 		".next/**",
-		"coverage/**"
+		"coverage/**",
+		"spikes/tray-stack/tray-css.ts",
+		"spikes/tray-stack/preact-htm.js"
 	]
 }

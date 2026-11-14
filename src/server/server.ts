@@ -66,13 +66,20 @@ function parseCommand(text: string): Command {
 	return raw;
 }
 
-function serveTray(name: string, res: ServerResponse) {
-	if (!readdirSync(TRAY_DIR).includes(name)) return send(res, 404, { error: 'not found' });
-	const js = stripTypeScriptTypes(readFileSync(join(TRAY_DIR, name), 'utf8'));
+function serveTray(name: string, res: ServerResponse, dir: string) {
+	if (!readdirSync(dir).includes(name)) return send(res, 404, { error: 'not found' });
+	const src = readFileSync(join(dir, name));
+	const js = name.endsWith('.ts') ? stripTypeScriptTypes(src.toString('utf8')) : src;
 	res.writeHead(200, { 'content-type': 'text/javascript' }).end(js);
 }
 
-type ServerOptions = { root: string; target: string; port: number; capture: Screenshotter };
+type ServerOptions = {
+	root: string;
+	target: string;
+	port: number;
+	capture: Screenshotter;
+	trayDir?: string;
+};
 
 export async function startServer(opts: ServerOptions) {
 	const store = openSession(opts.root, () => new Date().toISOString());
@@ -204,7 +211,8 @@ async function serve(opts: ServerOptions, store: ReturnType<typeof openSession>)
 			if (req.method === 'GET' && name === 'state') return send(res, 200, store.state());
 			if (req.method === 'POST' && name === 'commands')
 				return void handleCommand(req, res).catch(() => res.destroy()); // an unhandled rejection would end the whole session
-			if (req.method === 'GET' && name.endsWith('.ts')) return serveTray(name, res);
+			if (req.method === 'GET' && /\.[jt]s$/.test(name))
+				return serveTray(name, res, opts.trayDir ?? TRAY_DIR);
 			return send(res, 404, { error: 'not found' });
 		}
 		proxy(req, res);

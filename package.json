@@ -14,16 +14,21 @@
 		"test": "vitest run",
 		"test:e2e": "playwright test",
 		"test:watch": "vitest",
+		"build:tray-css": "node spikes/tray-stack/build-css.ts",
 		"typecheck": "tsc --noEmit"
 	},
 	"devDependencies": {
 		"@axe-core/playwright": "4.14.0",
 		"@playwright/test": "1.65.0",
+		"@tailwindcss/cli": "4.3.5",
 		"@types/node": "26.6.6",
+		"basecoat-css": "1.1.0",
+		"htm": "3.1.1",
 		"jsdom": "31.0.0",
 		"oxfmt": "0.78.0",
 		"oxlint": "1.93.0",
 		"oxlint-tsgolint": "7.0.2006",
+		"tailwindcss": "4.3.5",
 		"typescript": "7.0.2",
 		"vitest": "5.1.0"
 	},
