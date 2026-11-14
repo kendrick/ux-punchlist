@@ -28,6 +28,8 @@ try {
 		capture: screenshots.capture,
 	});
 	console.log(`punchlist: listening on ${server.url}`);
+	// The first pin otherwise pays the Chromium launch.
+	screenshots.warm();
 	if (server.warning) console.log(`punchlist: warning: ${server.warning}`);
 	const stop = async () => {
 		await Promise.all([server.close(), screenshots.close()]);
