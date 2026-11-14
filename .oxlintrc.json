@@ -20,6 +20,7 @@
 		"out/**",
 		".next/**",
 		"coverage/**",
-		"spikes/tray-stack/tray-css.ts"
+		"spikes/tray-stack/tray-css.ts",
+		"spikes/tray-stack/preact-htm.js"
 	]
 }

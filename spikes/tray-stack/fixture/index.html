@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<title>Hostile host page</title>
+		<style>
+			html {
+				font-size: 62.5%;
+			}
+			:root {
+				--color-primary: red;
+				--spacing: 10px;
+				--primary: red;
+				--background: red;
+			}
+			* {
+				--primary: red;
+			}
+			punchlist-tray {
+				--primary: red !important;
+			}
+		</style>
+	</head>
+	<body>
+		<h1>Hostile host page</h1>
+		<p>
+			This page sets the root font size, theme tokens and a rule aimed at the tray's host element.
+		</p>
+	</body>
+</html>

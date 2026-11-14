@@ -16,6 +16,7 @@
 		".next/**",
 		"coverage/**",
 		"spikes/tray-stack/tray-css.ts",
+		"spikes/tray-stack/preact-htm.js",
 		"pnpm-lock.yaml",
 		"package-lock.json",
 		"package.json",

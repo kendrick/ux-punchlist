@@ -24,14 +24,18 @@ function remToPx(css: string): string {
 
 // `@property` registrations are document-global and ignored in shadow-root sheets, so
 // their initial values never apply; declare them as plain custom properties instead.
+// They go in `@layer properties` (Tailwind declares it first, so it ranks lowest): unlayered,
+// they'd beat every utility that sets a --tw-* var and no ring, shadow or transform would apply.
 function propertiesToDeclarations(css: string): string {
 	const notInherited: string[] = [];
 	const inherited: string[] = [];
 	const stripped = css.replace(
 		/@property\s+(--[\w-]+)\s*\{([^}]*)\}/g,
 		(_, name: string, body: string) => {
-			const initial = /initial-value\s*:\s*([^;]+)/.exec(body)?.[1]?.trim();
+			let initial = /initial-value\s*:\s*([^;]+)/.exec(body)?.[1]?.trim();
 			if (initial === undefined) return '';
+			// The minifier writes a <length> 0 unitless; untyped, `calc(3px + 0)` is invalid.
+			if (initial === '0' && /syntax\s*:\s*["']<length/.test(body)) initial = '0px';
 			const inherits = /inherits\s*:\s*true/.test(body);
 			(inherits ? inherited : notInherited).push(`${name}:${initial}`);
 			return '';
@@ -42,7 +46,7 @@ function propertiesToDeclarations(css: string): string {
 		rules.push(`[data-pl-root],[data-pl-root] *,::before,::after{${notInherited.join(';')}}`);
 	}
 	if (inherited.length) rules.push(`[data-pl-root]{${inherited.join(';')}}`);
-	return stripped + rules.join('');
+	return rules.length ? `${stripped}@layer properties{${rules.join('')}}` : stripped;
 }
 
 export function postProcess(css: string): string {

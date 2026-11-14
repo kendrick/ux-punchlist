@@ -8,6 +8,8 @@
 
 allowBuilds:
   esbuild: true
+  # Pulled in by @tailwindcss/cli for watch mode only; the one-shot tray CSS build never needs its native addon.
+  '@parcel/watcher': false
 
 onlyBuiltDependencies:
   - esbuild

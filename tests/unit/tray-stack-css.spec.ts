@@ -46,6 +46,39 @@ describe('postProcess', () => {
 		expect(out).toContain('[data-pl-root]{--tw-x:1}');
 		expect(out).not.toContain('--tw-y');
 	});
+
+	it('layers the declarations so utilities that set --tw-* vars still win', () => {
+		const out = postProcess(
+			'@layer properties;@layer utilities{.ring{--tw-ring-shadow:0 0 0 3px red}}' +
+				'@property --tw-ring-shadow{syntax:"*";inherits:false;initial-value:0 0 #0000}' +
+				'@property --tw-x{syntax:"*";inherits:true;initial-value:1}',
+		);
+		expect(out).toMatch(
+			/@layer properties\{\[data-pl-root\],\[data-pl-root\] \*,::before,::after\{--tw-ring-shadow:0 0 #0000\}\[data-pl-root\]\{--tw-x:1\}\}$/,
+		);
+		expect(postProcess('a{b:c}')).toBe('a{b:c}');
+	});
+
+	it('gives a unitless <length> initial value a unit', () => {
+		const out = postProcess(
+			'@property --tw-ring-offset-width{syntax:"<length>";inherits:false;initial-value:0}' +
+				'@property --tw-n{syntax:"*";inherits:false;initial-value:0}',
+		);
+		expect(out).toContain('--tw-ring-offset-width:0px');
+		expect(out).toContain('--tw-n:0}');
+	});
+});
+
+describe('built tray CSS', () => {
+	it('declares the properties layer ahead of utilities, so it ranks lowest', async () => {
+		const { css } = await import('../../spikes/tray-stack/tray-css.ts');
+		// Cascade layers rank by first appearance.
+		const first = css.indexOf('@layer properties');
+		expect(first).toBeGreaterThanOrEqual(0);
+		expect(first).toBeLessThan(css.indexOf('@layer utilities'));
+		expect(css).toContain('--tw-ring-offset-width:0px');
+		expect(css).not.toMatch(/--tw-ring-offset-width:0[;}]/);
+	});
 });
 
 describe('tray-css.ts', () => {
