@@ -1,5 +1,9 @@
 // @vitest-environment node
-import { readFileSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
+import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { buildTrayCss } from '../../spikes/tray-stack/build-css.ts';
 import { postProcess } from '../../spikes/tray-stack/post-process.ts';
@@ -93,4 +97,27 @@ describe('tray-css.ts', () => {
 			'tray-css.ts is stale or hand-edited: run pnpm build:tray-css',
 		).toBe(committed);
 	});
+});
+
+describe('build-css.ts', () => {
+	it('builds from a checkout path that contains a space', () => {
+		// URL.pathname leaves "%20" in the path, so execFile hit ENOENT on a spaced checkout (66bc17f).
+		const repo = fileURLToPath(new URL('../../', import.meta.url));
+		const tmp = mkdtempSync(join(tmpdir(), 'tray-css-'));
+		try {
+			const copy = join(tmp, 'with space');
+			const dir = join(copy, 'spikes/tray-stack');
+			mkdirSync(dir, { recursive: true });
+			for (const f of ['build-css.ts', 'post-process.ts', 'input.css', 'tray.ts']) {
+				cpSync(join(repo, 'spikes/tray-stack', f), join(dir, f));
+			}
+			symlinkSync(join(repo, 'node_modules'), join(copy, 'node_modules'));
+			execFileSync('node', [join(dir, 'build-css.ts')], { cwd: tmp });
+			expect(readFileSync(join(dir, 'tray-css.ts'), 'utf8')).toBe(
+				readFileSync(join(repo, 'spikes/tray-stack/tray-css.ts'), 'utf8'),
+			);
+		} finally {
+			rmSync(tmp, { recursive: true, force: true });
+		}
+	}, 30_000);
 });
