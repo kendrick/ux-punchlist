@@ -131,6 +131,7 @@ function paintedShadows(el: Element) {
 		ctx.fillStyle = 'transparent';
 		ctx.fillStyle = color;
 		ctx.fillRect(0, 0, 1, 1);
+		// A 1x1 ImageData always has 4 bytes, so [3] (alpha) exists.
 		return ctx.getImageData(0, 0, 1, 1).data[3]! > 0 && lengths.some((l) => parseFloat(l) !== 0);
 	});
 }

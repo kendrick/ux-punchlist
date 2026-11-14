@@ -12,8 +12,11 @@ const bad = (text: string, prefix: string) => {
 	expect(fn).toThrow(new RegExp(`^${prefix.replace(/[[\].]/g, '\\$&')}`));
 };
 
-const roundTrip = (title: string) =>
-	parseManifest(serializeManifest([{ id: 'a', title, url: '/a' }]))[0]!.title;
+const roundTrip = (title: string) => {
+	const [first] = parseManifest(serializeManifest([{ id: 'a', title, url: '/a' }]));
+	if (!first) throw new Error('round trip parsed no item');
+	return first.title;
+};
 
 describe('parseManifest', () => {
 	it('parses fixtures/manifest.yaml into two items', () => {
@@ -123,6 +126,8 @@ describe('parseManifest', () => {
 		const back = parseManifest(
 			serializeManifest([{ id: 'a', title: 't', url: '/a', question: q }]),
 		);
-		expect(back[0]!.question).toBe(q);
+		const [first] = back;
+		if (!first) throw new Error('round trip parsed no item');
+		expect(first.question).toBe(q);
 	});
 });

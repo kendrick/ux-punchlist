@@ -9,9 +9,9 @@ import {
 	appDir,
 	makeRoot,
 	manifestPath,
+	portOf,
 	readEvents,
 	readLogBytes,
-	portOf,
 	startPunchlist,
 } from './helpers.ts';
 
@@ -129,9 +129,16 @@ test('killing and restarting the plugin restores position, comments and approval
 	await expect(page.getByText('1 comment', { exact: true })).toBeVisible();
 	snap();
 
-	for (let i = 1; i < snapshots.length; i++)
-		expect(snapshots[i]!.startsWith(snapshots[i - 1]!)).toBe(true);
-	expect(snapshots.at(-1)!.length).toBeGreaterThan(snapshots[0]!.length);
+	for (let i = 1; i < snapshots.length; i++) {
+		const prev = snapshots[i - 1];
+		const cur = snapshots[i];
+		if (prev === undefined || cur === undefined) throw new Error(`snapshot ${i} missing`);
+		expect(cur.startsWith(prev)).toBe(true);
+	}
+	const first = snapshots[0];
+	const last = snapshots.at(-1);
+	if (first === undefined || last === undefined) throw new Error('no snapshots taken');
+	expect(last.length).toBeGreaterThan(first.length);
 });
 
 test('a rejected comment keeps the typed text', async ({ page }) => {
