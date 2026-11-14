@@ -1,5 +1,6 @@
 import { execFile } from 'node:child_process';
 import { writeFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 import { postProcess } from './post-process.ts';
 
@@ -7,11 +8,11 @@ const here = new URL('.', import.meta.url);
 const root = new URL('../../', import.meta.url);
 
 export async function buildTrayCss(): Promise<string> {
-	const bin = new URL('node_modules/.bin/tailwindcss', root).pathname;
+	const bin = fileURLToPath(new URL('node_modules/.bin/tailwindcss', root));
 	const { stdout } = await promisify(execFile)(
 		bin,
-		['-i', new URL('input.css', here).pathname, '--minify'],
-		{ cwd: root.pathname, maxBuffer: 16 * 1024 * 1024 },
+		['-i', fileURLToPath(new URL('input.css', here)), '--minify'],
+		{ cwd: fileURLToPath(root), maxBuffer: 16 * 1024 * 1024 },
 	);
 	return `export const css = ${JSON.stringify(postProcess(stdout))};\n`;
 }
