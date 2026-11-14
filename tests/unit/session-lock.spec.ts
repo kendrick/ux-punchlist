@@ -158,7 +158,9 @@ describe('lockSession', () => {
 			vi.mocked(fs.unlinkSync).mockImplementation(realUnlinkSync);
 		}
 		expect(hooked).toBe(true);
-		expect(results.toSorted()).toEqual(['locked', 'refused']);
+		// lib is ES2022 (no toSorted); the spread is already a copy.
+		// oxlint-disable-next-line unicorn/no-array-sort
+		expect([...results].sort()).toEqual(['locked', 'refused']);
 		expect(readFileSync(path, 'utf8')).toBe(String(process.pid));
 		expect(readdirSync(dir)).toEqual(['.gitignore', 'session.lock']);
 	});

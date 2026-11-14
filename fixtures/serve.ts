@@ -1,7 +1,6 @@
 import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
 import { extname, join, normalize } from 'node:path';
-import type { AddressInfo } from 'node:net';
 
 const appDir = join(import.meta.dirname, 'app');
 const types: Record<string, string> = {
@@ -25,17 +24,22 @@ export function serveStatic(
 			res.writeHead(404).end();
 		}
 	});
-	return new Promise((resolve) =>
-		server.listen(port, '127.0.0.1', () =>
+	return new Promise((resolve, reject) =>
+		server.listen(port, '127.0.0.1', () => {
+			const address = server.address();
+			if (!address || typeof address === 'string') {
+				reject(new Error('server is not listening on a port'));
+				return;
+			}
 			resolve({
-				url: `http://127.0.0.1:${(server.address() as AddressInfo).port}`,
+				url: `http://127.0.0.1:${address.port}`,
 				close: () =>
 					new Promise<void>((done) => {
 						server.close(() => done());
 						server.closeAllConnections();
 					}),
-			}),
-		),
+			});
+		}),
 	);
 }
 

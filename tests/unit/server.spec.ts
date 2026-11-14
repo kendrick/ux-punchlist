@@ -12,7 +12,7 @@ import {
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
 import http, { type IncomingHttpHeaders } from 'node:http';
-import { connect, type AddressInfo } from 'node:net';
+import { connect } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, test } from 'vitest';
@@ -22,6 +22,18 @@ import { ManifestError } from '../../src/core/manifest.ts';
 import { SessionLockedError } from '../../src/server/session-lock.ts';
 import { startServer } from '../../src/server/server.ts';
 import { openSession } from '../../src/server/session-store.ts';
+import { portOf } from '../integration/helpers.ts';
+
+// Promise.withResolvers is ES2024; lib stays ES2022 so src/ can't reach for newer APIs unnoticed.
+function deferred<T>() {
+	let resolve!: (value: T) => void;
+	let reject!: (reason?: unknown) => void;
+	const promise = new Promise<T>((res, rej) => {
+		resolve = res;
+		reject = rej;
+	});
+	return { promise, resolve, reject };
+}
 
 const HTML = '<html><body><h1>App</h1></body></html>';
 const CSS = 'body { color: red; }\n';
@@ -121,7 +133,7 @@ beforeEach(async () => {
 		else res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' }).end(HTML);
 	});
 	await new Promise<void>((r) => target.listen(0, '127.0.0.1', r));
-	targetUrl = `http://127.0.0.1:${(target.address() as AddressInfo).port}`;
+	targetUrl = `http://127.0.0.1:${portOf(target)}`;
 	app = await startServer({
 		root,
 		target: targetUrl,
@@ -260,7 +272,7 @@ describe('server', () => {
 		const attacker = http.createServer((_req, res) => res.end('<script>attacker</script>'));
 		await new Promise<void>((r) => attacker.listen(0, '127.0.0.1', r));
 		try {
-			const host = `127.0.0.1:${(attacker.address() as AddressInfo).port}`;
+			const host = `127.0.0.1:${portOf(attacker)}`;
 			for (const path of [`//${host}/payload`, `http://${host}/payload`]) {
 				const res = await rawGet(path);
 				expect(res.body).not.toContain('attacker');
@@ -371,8 +383,8 @@ describe('server', () => {
 
 	test('close holds the root locked until a command blocked in capture has landed', async () => {
 		await app.close();
-		const blocked = Promise.withResolvers<void>();
-		const started = Promise.withResolvers<void>();
+		const blocked = deferred<void>();
+		const started = deferred<void>();
 		const opts = { root, target: targetUrl, port: 0 };
 		app = await startServer({
 			...opts,

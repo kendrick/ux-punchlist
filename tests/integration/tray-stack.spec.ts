@@ -9,7 +9,9 @@ const spike = join(import.meta.dirname, '..', '..', 'spikes', 'tray-stack');
 
 let cleanup: (() => Promise<void>)[] = [];
 test.afterEach(async () => {
-	for (const fn of cleanup.toReversed()) await fn();
+	// lib is ES2022 (no toReversed); the spread is already a copy.
+	// oxlint-disable-next-line unicorn/no-array-reverse
+	for (const fn of [...cleanup].reverse()) await fn();
 	cleanup = [];
 });
 
@@ -129,7 +131,8 @@ function paintedShadows(el: Element) {
 		ctx.fillStyle = 'transparent';
 		ctx.fillStyle = color;
 		ctx.fillRect(0, 0, 1, 1);
-		return ctx.getImageData(0, 0, 1, 1).data[3] > 0 && lengths.some((l) => parseFloat(l) !== 0);
+		// A 1x1 ImageData always has 4 bytes, so [3] (alpha) exists.
+		return ctx.getImageData(0, 0, 1, 1).data[3]! > 0 && lengths.some((l) => parseFloat(l) !== 0);
 	});
 }
 

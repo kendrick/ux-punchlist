@@ -2,7 +2,6 @@ import { AxeBuilder } from '@axe-core/playwright';
 import { expect, test, type Page } from '@playwright/test';
 import { readFileSync, statSync } from 'node:fs';
 import { createServer } from 'node:http';
-import type { AddressInfo } from 'node:net';
 import { join } from 'node:path';
 import { parseManifest } from '../../src/core/manifest.ts';
 import { serveStatic } from '../../fixtures/serve.ts';
@@ -10,6 +9,7 @@ import {
 	appDir,
 	makeRoot,
 	manifestPath,
+	portOf,
 	readEvents,
 	readLogBytes,
 	startPunchlist,
@@ -20,7 +20,9 @@ const total = parseManifest(readFileSync(manifestPath, 'utf8')).length;
 // Every test gets its own root and servers on port 0: fullyParallel runs the five projects at once.
 let cleanup: (() => void | Promise<void>)[] = [];
 test.afterEach(async () => {
-	for (const fn of cleanup.toReversed()) await fn();
+	// lib is ES2022 (no toReversed); the spread is already a copy.
+	// oxlint-disable-next-line unicorn/no-array-reverse
+	for (const fn of [...cleanup].reverse()) await fn();
 	cleanup = [];
 });
 
@@ -62,7 +64,7 @@ test('pinning a comment appends one event with item, selector, text, screenshot 
 	const added = readEvents(root).slice(before);
 	expect(added).toHaveLength(1);
 	const ev = added[0];
-	if (ev.type !== 'comment-pinned') throw new Error(`unexpected event ${ev.type}`);
+	if (!ev || ev.type !== 'comment-pinned') throw new Error(`unexpected event ${ev?.type}`);
 	expect(ev.itemId).toBe('home-hero');
 	expect(ev.text).toBe('Too vague');
 	expect(ev.pageUrl).toBe(app.url + '/');
@@ -127,9 +129,16 @@ test('killing and restarting the plugin restores position, comments and approval
 	await expect(page.getByText('1 comment', { exact: true })).toBeVisible();
 	snap();
 
-	for (let i = 1; i < snapshots.length; i++)
-		expect(snapshots[i].startsWith(snapshots[i - 1])).toBe(true);
-	expect(snapshots.at(-1).length).toBeGreaterThan(snapshots[0].length);
+	for (let i = 1; i < snapshots.length; i++) {
+		const prev = snapshots[i - 1];
+		const cur = snapshots[i];
+		if (prev === undefined || cur === undefined) throw new Error(`snapshot ${i} missing`);
+		expect(cur.startsWith(prev)).toBe(true);
+	}
+	const first = snapshots[0];
+	const last = snapshots.at(-1);
+	if (first === undefined || last === undefined) throw new Error('no snapshots taken');
+	expect(last.length).toBeGreaterThan(first.length);
 });
 
 test('a rejected comment keeps the typed text', async ({ page }) => {
@@ -237,10 +246,7 @@ test('the tray shows and works on a target whose CSP allows scripts only by nonc
 		target.closeAllConnections();
 		target.close();
 	});
-	const p = await startPunchlist(
-		root,
-		`http://127.0.0.1:${(target.address() as AddressInfo).port}`,
-	);
+	const p = await startPunchlist(root, `http://127.0.0.1:${portOf(target)}`);
 	cleanup.push(() => p.kill());
 	await page.goto(p.url + '/');
 	await expect(
@@ -258,10 +264,7 @@ async function startWithTarget(html: string, headers: Record<string, string> = {
 		target.close();
 	});
 	const root = makeRoot();
-	const p = await startPunchlist(
-		root,
-		`http://127.0.0.1:${(target.address() as AddressInfo).port}`,
-	);
+	const p = await startPunchlist(root, `http://127.0.0.1:${portOf(target)}`);
 	cleanup.push(() => p.kill());
 	return { ...p, root };
 }

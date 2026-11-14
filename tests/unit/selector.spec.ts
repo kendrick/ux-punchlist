@@ -39,6 +39,7 @@ describe('cssPath', () => {
 		document.body.innerHTML =
 			'<section><div id="outer"><div><span></span><span id="in"></span><span></span></div></div></section>';
 		const el = document.querySelectorAll('span')[2];
+		if (!el) throw new Error('third span missing');
 		expect(cssPath(el).startsWith('[id="outer"] > ')).toBe(true);
 		expectResolvesTo(el);
 	});
