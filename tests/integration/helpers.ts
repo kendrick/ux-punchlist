@@ -1,11 +1,18 @@
 import { spawn } from 'node:child_process';
 import { cpSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import type { Server } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { ReviewEvent } from '../../src/core/events.ts';
 import { readLog } from '../../src/core/log.ts';
 
 const repo = join(import.meta.dirname, '..', '..');
+
+export function portOf(server: Server): number {
+	const address = server.address();
+	if (!address || typeof address === 'string') throw new Error('server is not listening on a port');
+	return address.port;
+}
 
 export const manifestPath = join(repo, 'fixtures', 'manifest.yaml');
 export const appDir = join(repo, 'fixtures', 'app');
@@ -33,7 +40,7 @@ export function startPunchlist(
 		child.stdout.on('data', (chunk) => {
 			out += chunk;
 			const m = out.match(/punchlist: listening on (\S+)/);
-			if (m) {
+			if (m?.[1]) {
 				child.removeAllListeners('exit');
 				resolve({
 					url: m[1],

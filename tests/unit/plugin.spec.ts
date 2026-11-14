@@ -27,7 +27,7 @@ Single-context: one \`GLOSSARY.md\` and \`docs/adr/\` at the repo root. See \`do
 `;
 
 function fencedBlocks(markdown: string): string[] {
-	return [...markdown.matchAll(/```[a-z]*\n([\s\S]*?)```/g)].map((m) => m[1]);
+	return [...markdown.matchAll(/```[a-z]*\n([\s\S]*?)```/g)].map((m) => m[1] ?? '');
 }
 
 describe('plugin packaging', () => {
@@ -44,7 +44,7 @@ describe('plugin packaging', () => {
 		const text = read('skills/review/SKILL.md');
 		const match = /^---\n([\s\S]*?)\n---\n/.exec(text);
 		expect(match).not.toBeNull();
-		const frontmatter = parseYaml(match![1]);
+		const frontmatter = parseYaml(match![1]!);
 		expect(frontmatter.name).toBe('review');
 		expect(frontmatter.description).toMatch(/start.*review session/i);
 	});

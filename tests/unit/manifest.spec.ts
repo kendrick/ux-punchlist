@@ -13,7 +13,7 @@ const bad = (text: string, prefix: string) => {
 };
 
 const roundTrip = (title: string) =>
-	parseManifest(serializeManifest([{ id: 'a', title, url: '/a' }]))[0].title;
+	parseManifest(serializeManifest([{ id: 'a', title, url: '/a' }]))[0]!.title;
 
 describe('parseManifest', () => {
 	it('parses fixtures/manifest.yaml into two items', () => {
@@ -85,6 +85,7 @@ describe('parseManifest', () => {
 		expect(parseManifest(nav('[a, b, c, d]'))[0]?.options).toEqual(['a', 'b', 'c', 'd']));
 	it('an item without options has none', () => {
 		const [parsed] = parseManifest(`items:\n${item()}`);
+		if (!parsed) throw new Error('no item parsed');
 		expect('options' in parsed).toBe(false);
 	});
 	it.each(['[a, a]', '[A]'])('rejects duplicate or malformed option ids %s', (options) =>
@@ -122,6 +123,6 @@ describe('parseManifest', () => {
 		const back = parseManifest(
 			serializeManifest([{ id: 'a', title: 't', url: '/a', question: q }]),
 		);
-		expect(back[0].question).toBe(q);
+		expect(back[0]!.question).toBe(q);
 	});
 });

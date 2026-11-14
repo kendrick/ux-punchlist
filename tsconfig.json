@@ -4,6 +4,13 @@
 	"compilerOptions": {
 		"allowImportingTsExtensions": true
 	},
-	"include": ["src/**/*.ts", "src/**/*.tsx", "*.config.ts", "*.config.mjs"],
+	"include": [
+		"src/**/*.ts",
+		"src/**/*.tsx",
+		"tests/**/*.ts",
+		"fixtures/**/*.ts",
+		"*.config.ts",
+		"*.config.mjs"
+	],
 	"exclude": ["node_modules", "dist", "build", ".next", "out"]
 }
