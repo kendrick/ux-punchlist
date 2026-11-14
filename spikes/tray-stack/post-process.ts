@@ -1,8 +1,9 @@
 // Rewrites Tailwind/Basecoat output so it holds up inside the tray's shadow root.
-// Each step exists because of a host-page trap; see docs/adr/0001-tray-ui-stack.md.
+// Each step exists because of a reviewed-page trap; see docs/adr/0001-tray-ui-stack.md.
+// shortcut: regexes over minified CSS, not a parser, so a `rem` or `:root` inside a string gets rewritten too; upgrade to a CSS AST when the spike moves to src/tray/.
 
 // `:root`/`:host` can't be targeted from a shadow root's sheet without also matching the
-// host page's own :root rules, so the tray marks its own container instead.
+// reviewed page's own :root rules, so the tray marks its own container instead.
 function rewriteRoots(css: string): string {
 	let out = css.replace(/:(?:root|host)(?![\w(-])/g, '[data-pl-root]');
 	// `:root,:host` becomes a selector list naming the same target twice.
@@ -14,7 +15,7 @@ function rewriteRoots(css: string): string {
 	return out;
 }
 
-// A host's `html { font-size: 62.5% }` would shrink every rem; px is immune.
+// The reviewed page's `html { font-size: 62.5% }` would shrink every rem; px is immune.
 function remToPx(css: string): string {
 	return css.replace(
 		/(?<![\w.])(\d*\.?\d+)rem(?![\w-])/g,

@@ -14,20 +14,23 @@ const root = host.attachShadow({ mode: 'open' });
 root.adoptedStyleSheets = [reset, built];
 document.body.append(host);
 
+// [data-pl-root] is a wrapper so the overlay can sit beside the bar under the same tokens.
 // overflow-hidden on the bar is deliberate: the popover only escapes it because native popover renders in the top layer.
 render(
-	html`<div
-		data-pl-root
-		class="fixed inset-x-0 bottom-0 z-50 flex h-14 items-center gap-3 overflow-hidden border-t bg-background px-4 text-sm text-foreground"
-	>
-		<span class="font-semibold">Review tray</span>
-		<button type="button" class="btn" popovertarget="pl-popover">Open</button>
+	html`<div data-pl-root>
 		<div
-			id="pl-popover"
-			popover
-			class="inset-auto bottom-10 left-4 m-0 w-64 rounded-md bg-popover p-4 text-popover-foreground shadow-md ring-1 ring-foreground/10"
+			id="pl-bar"
+			class="fixed inset-x-0 bottom-0 z-50 flex h-14 items-center gap-3 overflow-hidden border-t bg-background px-4 text-sm text-foreground"
 		>
-			Popover content renders above the bar.
+			<span class="font-semibold">Review tray</span>
+			<button type="button" class="btn" popovertarget="pl-popover">Open</button>
+			<div
+				id="pl-popover"
+				popover
+				class="inset-auto bottom-10 left-4 m-0 w-64 rounded-md bg-popover p-4 text-popover-foreground shadow-md ring-1 ring-foreground/10"
+			>
+				Popover content renders above the bar.
+			</div>
 		</div>
 	</div>`,
 	root,

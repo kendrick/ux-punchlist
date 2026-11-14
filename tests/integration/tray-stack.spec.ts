@@ -4,7 +4,7 @@ import { serveStatic } from '../../fixtures/serve.ts';
 import { startServer } from '../../src/server/server.ts';
 import { makeRoot } from './helpers.ts';
 
-// Proof for #15: the spike tray in spikes/tray-stack, served through the real proxy and injectTray, on a hostile host page.
+// Proof for #15: the spike tray in spikes/tray-stack, served through the real proxy and injectTray, on a hostile reviewed page.
 const spike = join(import.meta.dirname, '..', '..', 'spikes', 'tray-stack');
 
 let cleanup: (() => Promise<void>)[] = [];
@@ -28,7 +28,18 @@ async function setup() {
 }
 
 const trayRoot = (page: Page) => page.locator('punchlist-tray [data-pl-root]');
+const bar = (page: Page) => page.locator('punchlist-tray #pl-bar');
+const popover = (page: Page) => page.locator('punchlist-tray #pl-popover');
 const button = (page: Page) => page.locator('punchlist-tray').getByRole('button', { name: 'Open' });
+const rootFontSize = (page: Page) =>
+	page.evaluate(() => getComputedStyle(document.documentElement).fontSize);
+
+async function rewritePage(page: Page, url: string, edit: (html: string) => string) {
+	await page.route(url + '/', async (route) => {
+		const res = await route.fetch();
+		await route.fulfill({ response: res, body: edit(await res.text()) });
+	});
+}
 
 async function trayColors(page: Page) {
 	await expect(button(page)).toBeVisible();
@@ -43,47 +54,35 @@ async function trayColors(page: Page) {
 	};
 }
 
-async function trayShot(page: Page, url: string, rootFontSize: string) {
+async function trayShot(page: Page, url: string, fontSize: string) {
 	await page.goto(url + '/');
 	await expect(button(page)).toBeVisible();
-	expect(await page.evaluate(() => getComputedStyle(document.documentElement).fontSize)).toBe(
-		rootFontSize,
-	);
-	return trayRoot(page).screenshot();
+	expect(await rootFontSize(page)).toBe(fontSize);
+	return bar(page).screenshot();
 }
 
-test('tray sizes ignore the host root font size', async ({ page }) => {
+test("tray sizes ignore the reviewed page's root font size", async ({ page }) => {
 	const url = await setup();
 	const small = await trayShot(page, url, '10px');
 	// Two loads, not a style tag added after load: WebKit doesn't restyle a shadow tree when the root font size changes later, so rem would slip past.
-	await page.route(url + '/', async (route) => {
-		const res = await route.fetch();
-		const body = (await res.text()).replace('font-size: 62.5%', 'font-size: 100%');
-		await route.fulfill({ response: res, body });
-	});
+	await rewritePage(page, url, (html) => html.replace('font-size: 62.5%', 'font-size: 100%'));
 	const full = await trayShot(page, url, '16px');
 	expect(full.equals(small)).toBe(true);
 });
 
-test("host tokens and rules don't reach the tray's colors", async ({ page }) => {
+test("the reviewed page's tokens and rules don't reach the tray's colors", async ({ page }) => {
 	const url = await setup();
 	await page.goto(url + '/');
 	const hostile = await trayColors(page);
 
 	// Same page with the fixture's hostile <style> removed: the baseline the tray should match.
-	await page.route(url + '/', async (route) => {
-		const res = await route.fetch();
-		const body = (await res.text()).replace(/<style>[\s\S]*?<\/style>/, '');
-		await route.fulfill({ response: res, body });
-	});
+	await rewritePage(page, url, (html) => html.replace(/<style>[\s\S]*?<\/style>/, ''));
 	await page.goto(url + '/');
-	expect(await page.evaluate(() => getComputedStyle(document.documentElement).fontSize)).toBe(
-		'16px',
-	);
+	expect(await rootFontSize(page)).toBe('16px');
 	const clean = await trayColors(page);
 
 	expect(hostile).toEqual(clean);
-	// Equal-but-both-red would also pass the line above; the host's red must not be what the tray shows.
+	// Equal-but-both-red would also pass the line above; the page's red must not be what the tray shows.
 	expect(hostile.background).not.toBe('rgb(255, 0, 0)');
 	expect(hostile.primary).not.toBe('red');
 });
@@ -145,10 +144,9 @@ test('focus ring renders in the shadow root', async ({ page }) => {
 test('shadow, ring and transform utilities apply in the shadow root', async ({ page }) => {
 	await page.goto((await setup()) + '/');
 	await button(page).click();
-	const popover = page.locator('punchlist-tray #pl-popover');
-	await expect(popover).toBeVisible();
+	await expect(popover(page)).toBeVisible();
 	// shadow-md is two layers, ring-1 one.
-	expect(await popover.evaluate(paintedShadows)).toHaveLength(3);
+	expect(await popover(page).evaluate(paintedShadows)).toHaveLength(3);
 
 	// The tray uses no transform utility yet, so borrow Basecoat's dialog panel, which sets --tw-translate-* and --tw-scale-*.
 	const transform = await trayRoot(page).evaluate((root) => {
@@ -165,19 +163,18 @@ test('shadow, ring and transform utilities apply in the shadow root', async ({ p
 test("popover opens and isn't clipped by the tray bar", async ({ page }) => {
 	await page.goto((await setup()) + '/');
 	await button(page).click();
-	const popover = page.locator('punchlist-tray #pl-popover');
-	await expect(popover).toBeVisible();
-	expect(await popover.evaluate((el) => el.matches(':popover-open'))).toBe(true);
+	await expect(popover(page)).toBeVisible();
+	expect(await popover(page).evaluate((el) => el.matches(':popover-open'))).toBe(true);
 
-	const box = (await popover.boundingBox())!;
-	const bar = (await trayRoot(page).boundingBox())!;
+	const box = (await popover(page).boundingBox())!;
+	const barBox = (await bar(page).boundingBox())!;
 	const viewport = page.viewportSize()!;
 	expect(box.x).toBeGreaterThanOrEqual(0);
 	expect(box.y).toBeGreaterThanOrEqual(0);
 	expect(box.x + box.width).toBeLessThanOrEqual(viewport.width);
 	expect(box.y + box.height).toBeLessThanOrEqual(viewport.height);
 	// The popover reaches above the bar, whose overflow is hidden; only the top layer lets that part show.
-	expect(box.y).toBeLessThan(bar.y);
+	expect(box.y).toBeLessThan(barBox.y);
 
 	const hit = await page.evaluate(
 		({ x, y }) => {
