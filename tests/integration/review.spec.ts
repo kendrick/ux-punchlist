@@ -17,6 +17,9 @@ import {
 
 const total = parseManifest(readFileSync(manifestPath, 'utf8')).length;
 
+// A pin waits for a server-side capture, which ran past the default 5 s under concurrent suites (#45).
+const afterPin = { timeout: 15_000 };
+
 // Every test gets its own root and servers on port 0: fullyParallel runs the five projects at once.
 let cleanup: (() => void | Promise<void>)[] = [];
 test.afterEach(async () => {
@@ -59,7 +62,7 @@ test('pinning a comment appends one event with item, selector, text, screenshot 
 	await page.locator('.feature').nth(1).click();
 	await page.getByRole('textbox', { name: 'Comment' }).fill('Too vague');
 	await page.getByRole('button', { name: 'Pin comment' }).click();
-	await expect(page.getByText('1 comment', { exact: true })).toBeVisible();
+	await expect(page.getByText('1 comment', { exact: true })).toBeVisible(afterPin);
 
 	const added = readEvents(root).slice(before);
 	expect(added).toHaveLength(1);
@@ -94,6 +97,8 @@ test('approving appends one approval event and the tray shows Approved', async (
 test('killing and restarting the plugin restores position, comments and approvals', async ({
 	page,
 }) => {
+	// Starts punchlist twice; fixtures plus one spawn took ~16.5 s under four concurrent suites (#45).
+	test.slow();
 	const { root, start, punchlist } = await setup();
 	const snapshots: string[] = [];
 	const snap = () => snapshots.push(readLogBytes(root));
@@ -109,7 +114,7 @@ test('killing and restarting the plugin restores position, comments and approval
 	await page.locator('table').click();
 	await page.getByRole('textbox', { name: 'Comment' }).fill('Prices unclear');
 	await page.getByRole('button', { name: 'Pin comment' }).click();
-	await expect(page.getByText('1 comment', { exact: true })).toBeVisible();
+	await expect(page.getByText('1 comment', { exact: true })).toBeVisible(afterPin);
 	snap();
 	await page.getByRole('button', { name: 'Approve' }).click();
 	await expect(page.getByText('Approved', { exact: true })).toBeVisible();
@@ -184,7 +189,7 @@ test('items whose URLs carry a fragment can be reached and commented on', async 
 	await page.locator('table').click();
 	await page.getByRole('textbox', { name: 'Comment' }).fill('FAQ');
 	await page.getByRole('button', { name: 'Pin comment' }).click();
-	await expect(page.getByText('1 comment', { exact: true })).toBeVisible();
+	await expect(page.getByText('1 comment', { exact: true })).toBeVisible(afterPin);
 	expect(readEvents(root).at(-1)).toMatchObject({
 		type: 'comment-pinned',
 		itemId: 'faq',
@@ -224,7 +229,7 @@ test('a double-clicked Pin comment pins once and stays disabled in flight', asyn
 	await pin.dblclick();
 	await expect(pin).toBeDisabled();
 	release();
-	await expect(page.getByText('1 comment', { exact: true })).toBeVisible();
+	await expect(page.getByText('1 comment', { exact: true })).toBeVisible(afterPin);
 	expect(readEvents(root).filter((e) => e.type === 'comment-pinned')).toHaveLength(1);
 });
 
@@ -341,7 +346,7 @@ test('Comment mode picks an inline SVG inside a link instead of following the li
 	await page.getByRole('textbox', { name: 'Comment' }).fill('Icon');
 	expect(new URL(page.url()).pathname).toBe('/');
 	await page.getByRole('button', { name: 'Pin comment' }).click();
-	await expect(page.getByText('1 comment', { exact: true })).toBeVisible();
+	await expect(page.getByText('1 comment', { exact: true })).toBeVisible(afterPin);
 
 	const ev = readEvents(p.root).at(-1);
 	if (ev?.type !== 'comment-pinned') throw new Error(`unexpected event ${ev?.type}`);
